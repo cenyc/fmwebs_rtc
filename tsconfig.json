@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        // 这里放入所需的编译选项配置
+        "target": "es5",
+        "lib": [
+            "esnext",
+            "dom"
+        ],
+        "baseUrl": ".",
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        },
+        "jsx": "preserve",
+        "allowJs": true,
+    },
+    "include": [
+        // 指定包含在编译过程中的源文件路径
+        "./src/**/*",
+        "./env.d.ts",
+    ],
+    "exclude": [
+        // 指定不参与编译的文件或文件夹路径
+    ],
+}
