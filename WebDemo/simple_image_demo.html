@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简单图像演示</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8fafc;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e293b;
+            margin-bottom: 30px;
+        }
+
+        .images-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .image-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .image-card h3 {
+            margin: 0 0 15px 0;
+            color: #374151;
+            font-size: 1.1rem;
+        }
+
+        .image-placeholder {
+            width: 100%;
+            height: 200px;
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .image-placeholder img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        .status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .status.loading {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .status.success {
+            background: #dcfce7;
+            color: #047857;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .log-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .log-container {
+            background: #1f2937;
+            color: #f3f4f6;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            height: 150px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            margin-bottom: 2px;
+            white-space: pre-wrap;
+        }
+
+        .log-info { color: #60a5fa; }
+        .log-success { color: #34d399; }
+        .log-warning { color: #fbbf24; }
+        .log-error { color: #f87171; }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #374151;
+            font-size: 1.3rem;
+        }
+
+        .table-controls {
+            margin-bottom: 15px;
+        }
+
+        .table-controls button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .table-controls button:hover {
+            background: #1d4ed8;
+        }
+
+        .table-controls button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        td {
+            color: #6b7280;
+        }
+
+        .image-path {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .image-path:hover {
+            background-color: #f3f4f6;
+        }
+
+        .status-tag {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-tag.processed {
+            background: #dcfce7;
+            color: #047857;
+        }
+
+        .status-tag.pending {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        @media (max-width: 768px) {
+            .images-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .table-controls button {
+                width: 100%;
+                margin-bottom: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 图像演示 - 集成表格功能</h1>
+
+
+        <!-- 表格演示 -->
+        <div class="section">
+            <h2>表格图像预览</h2>
+            <div class="table-controls">
+                <button id="replaceWithImages">替换为图像</button>
+                <button id="restoreTable">恢复表格</button>
+                <button id="clearCache">清理缓存</button>
+            </div>
+
+            <div class="table-container">
+                <table id="demoTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>图像路径</th>
+                            <th>创建时间</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>001</td>
+                            <td class="image-path">images/test/1.png</td>
+                            <td>2025-09-18 10:30:00</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>002</td>
+                            <td class="image-path">images/test/2.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>003</td>
+                            <td class="image-path">images/test/3.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>004</td>
+                            <td class="image-path">images/test/4.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>005</td>
+                            <td class="image-path">images/test/5.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>006</td>
+                            <td class="image-path">images/test/6.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>007</td>
+                            <td class="image-path">images/test/7.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>008</td>
+                            <td class="image-path">images/test/8.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>009</td>
+                            <td class="image-path">images/test/9.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                        <tr>
+                            <td>010</td>
+                            <td class="image-path">images/test/10.png</td>
+                            <td>2025-09-18 11:15:30</td>
+                            <td><span class="status-tag processed">已处理</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="log-section">
+            <h3 style="margin-top: 0;">加载日志</h3>
+            <div class="log-container" id="logContainer"></div>
+        </div>
+    </div>
+
+    <!-- 引入依赖的JS文件 -->
+    <script src="webrtc_chunker.js"></script>
+    <script src="image_access_client.js"></script>
+    <script src="table_image_helper.js"></script>
+
+    <script>
+        // 日志函数
+        function appendLog(message, level = 'info') {
+            const container = document.getElementById('logContainer');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${level}`;
+            entry.textContent = `[${time}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+
+            // 限制日志条数
+            while (container.children.length > 50) {
+                container.removeChild(container.firstChild);
+            }
+        }
+
+        // 创建图像访问客户端
+        const client = new ImageAccessClient({
+            INTERNAL_IP: '172.31.144.1',
+            INTERNAL_PORT: 5002,
+            SIGNALING_URL: 'ws://120.55.85.213:8081',
+            AUTH_URL: 'http://120.55.85.213:8081',
+            API_KEY: 'UvbYOGVn16HFhWCGMk5LYINH09UysWIZEthkBNELQbUeEIgFhrkszZRBrg35LfgF',
+            IMAGE_ENDPOINT: '/api/images/by-path',
+            LAN_TIMEOUT_MS: 3500,
+            LOG_ENABLED: true,
+            LOG_CALLBACK: appendLog
+        });
+
+        // 创建表格图像助手
+        const tableHelper = new TableImageHelper(client);
+
+        // 保存表格原始数据
+        const originalTableData = {};
+
+
+        // 保存表格原始数据
+        function saveOriginalTableData() {
+            const cells = document.querySelectorAll('#demoTable .image-path');
+            cells.forEach((cell, index) => {
+                originalTableData[index] = cell.innerHTML;
+            });
+        }
+
+        // 恢复表格原始数据
+        function restoreTableData() {
+            const cells = document.querySelectorAll('#demoTable .image-path');
+            cells.forEach((cell, index) => {
+                if (originalTableData[index]) {
+                    cell.innerHTML = originalTableData[index];
+                    cell.style.cursor = 'pointer';
+                }
+            });
+
+            // 重置按钮状态
+            document.getElementById('replaceWithImages').disabled = false;
+            document.getElementById('replaceWithImages').textContent = '替换为图像';
+
+            appendLog('表格已恢复为原始状态', 'info');
+        }
+
+
+        document.getElementById('replaceWithImages').addEventListener('click', async () => {
+            const btn = document.getElementById('replaceWithImages');
+
+            // 检查网络状态
+            const networkMode = client.getNetworkMode();
+            if (!networkMode) {
+                appendLog('⚠️ 网络环境未检测，请等待系统初始化完成', 'warning');
+                return;
+            }
+
+            // 检查WebRTC连接状态
+            if (networkMode === 'remote' && !client.isWebRTCReady()) {
+                appendLog('⚠️ WebRTC连接未就绪，传输可能会有延迟', 'warning');
+                appendLog('🔄 建议刷新页面重新建立连接', 'info');
+            }
+
+            btn.disabled = true;
+            btn.textContent = '🚀 串行传输中...';
+            btn.style.background = '#f59e0b'; // 黄色表示传输中
+
+            const startTime = Date.now();
+            const modeDesc = networkMode === 'lan' ? '局域网直连' :
+                           (client.isWebRTCReady() ? 'WebRTC(已预连接)' : 'WebRTC(建立连接中)');
+
+            appendLog(`🚀 开始串行图像传输 - 模式: ${modeDesc}`, 'info');
+
+            try {
+                await tableHelper.replaceTableImagesWithActual('#demoTable', '.image-path', {
+                    imageSize: '80px',
+                    showOriginalPath: false,
+                    showFileInfo: false
+                });
+
+                const duration = Date.now() - startTime;
+                appendLog(`✅ 串行传输完成！总耗时: ${(duration/1000).toFixed(1)}秒`, 'success');
+                btn.textContent = '✅ 已替换';
+                btn.style.background = '#10b981'; // 绿色表示成功
+
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                appendLog(`❌ 串行传输失败，耗时: ${(duration/1000).toFixed(1)}秒`, 'error');
+                appendLog(`🔍 错误详情: ${error.message}`, 'error');
+                btn.disabled = false;
+                btn.textContent = '替换为图像';
+                btn.style.background = '#ef4444'; // 红色表示失败
+            }
+        });
+
+        document.getElementById('restoreTable').addEventListener('click', restoreTableData);
+
+        document.getElementById('clearCache').addEventListener('click', () => {
+            tableHelper.clearCache();
+            appendLog('图像缓存已清理', 'info');
+        });
+
+        // 页面加载完成后自动检测网络并建立连接
+        document.addEventListener('DOMContentLoaded', async () => {
+            appendLog('🚀 页面初始化完成，开始自动检测网络环境...', 'info');
+
+            // 保存表格原始数据
+            saveOriginalTableData();
+
+            try {
+                // 步骤1: 检测网络环境
+                appendLog('🔍 步骤1: 检测网络环境...', 'info');
+                const networkMode = await client.detectNetworkMode();
+                appendLog(`✅ 网络环境检测完成: ${networkMode === 'lan' ? '局域网模式' : 'WebRTC远程模式'}`, 'success');
+
+                // 步骤2: 建立连接
+                if (networkMode === 'remote') {
+                    appendLog('🔗 步骤2: 预建立WebRTC连接...', 'info');
+                    appendLog('  ⏳ 正在进行身份认证...', 'info');
+                    appendLog('  ⏳ 正在连接信令服务器...', 'info');
+                    appendLog('  ⏳ 正在建立WebRTC数据通道...', 'info');
+
+                    const connectionSuccess = await client.preEstablishWebRTCConnection();
+
+                    if (connectionSuccess) {
+                        appendLog('✅ WebRTC连接建立成功！数据通道已就绪', 'success');
+                        appendLog('📡 连接状态: 已连接到远程服务器', 'success');
+                    } else {
+                        appendLog('❌ WebRTC连接建立失败', 'error');
+                        appendLog('⚠️ 图像传输可能会有延迟', 'warning');
+                    }
+                } else {
+                    appendLog('✅ 局域网模式，无需预建立连接', 'success');
+                    appendLog('⚡ 连接状态: 局域网直连就绪', 'success');
+                }
+
+                // 步骤3: 系统就绪
+                appendLog('🎉 系统初始化完成！', 'success');
+                appendLog(`📋 当前传输模式: ${networkMode === 'lan' ? '局域网直连(高速)' : 'WebRTC远程(已预连接)'}`, 'info');
+                appendLog('💡 现在可以点击"替换为图像"开始高速传输', 'info');
+
+                // 更新按钮状态
+                const btn = document.getElementById('replaceWithImages');
+                if (networkMode === 'remote' && client.isWebRTCReady()) {
+                    btn.style.background = '#10b981'; // 绿色表示就绪
+                    btn.title = 'WebRTC连接已就绪，可以快速传输';
+                } else if (networkMode === 'lan') {
+                    btn.style.background = '#3b82f6'; // 蓝色表示局域网
+                    btn.title = '局域网直连模式，高速传输';
+                }
+
+            } catch (error) {
+                appendLog(`❌ 系统初始化失败: ${error.message}`, 'error');
+                appendLog('🔧 请检查网络连接或配置', 'error');
+            }
+        });
+
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', () => {
+            client.close();
+        });
+    </script>
+</body>
+</html>
