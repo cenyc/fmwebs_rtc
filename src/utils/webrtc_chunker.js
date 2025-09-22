@@ -329,9 +329,9 @@ class WebRTCChunker {
         }
         
         if (channel && channel.bufferedAmount !== undefined) {
-            const bufferedAmount = channel.bufferedAmount;
-            const maxBufferSize = 256 * 1024; // 256KB，WebRTC数据通道典型缓冲区大小
-            const bufferUsage = bufferedAmount / maxBufferSize;
+                const bufferedAmount = channel.bufferedAmount;
+                const maxBufferSize = 256 * 1024; // 256KB，WebRTC数据通道典型缓冲区大小
+                let bufferUsage = bufferedAmount / maxBufferSize;
             
             // 如果缓冲区使用率超过70%，开始背压处理
             if (bufferUsage > 0.7) {
@@ -860,7 +860,7 @@ class WebRTCChunker {
         this.running = false;
         
         // 清理所有ACK超时
-        for (const [messageId, timeout] of this.ackTimeouts) {
+        for (const [, timeout] of this.ackTimeouts) {
             clearTimeout(timeout);
         }
         
@@ -884,4 +884,11 @@ class WebRTCChunker {
             timeout: this.messageTimeout
         };
     }
+}
+
+// 导出到全局/Node
+if (typeof window !== 'undefined') {
+    window.WebRTCChunker = WebRTCChunker;
+} else if (typeof module !== 'undefined' && module.exports) {
+    module.exports = WebRTCChunker;
 }

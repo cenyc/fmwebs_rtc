@@ -40,7 +40,7 @@
       </q-btn-group>
     </div>
   </div>
-  <div class="smart-table-container">
+  <div class="smart-table-container" ref="tableRoot">
     <!-- 数据表格 -->
     <q-table :rows="tableData" :columns="visibleColumns" row-key="id"
       :selection="tableData?.length ? 'multiple' : 'none'" v-model:selected="selected" :loading="loading"
@@ -52,11 +52,13 @@
           <q-tooltip class="bi-text-wrap">{{ props.value }}</q-tooltip>
         </q-td>
         <q-td :props="props" v-else>
-          <div v-if="props.col.name.endsWith('_time') || props.col.name.endsWith('_at')">{{ formatDate(props.value) }}
-          </div>
-          <slot v-else name="body-cell" v-bind="props">
-            {{ props.value }}
-          </slot>
+          <div v-if="props.col.name.endsWith('_time') || props.col.name.endsWith('_at')">{{ formatDate(props.value) }}</div>
+          <template v-else>
+            <div v-if="isImageValue(props.value)" class="si-image-cell" style="display:flex;justify-content:center;">{{ props.value }}</div>
+            <slot v-else name="body-cell" v-bind="props">
+              {{ props.value }}
+            </slot>
+          </template>
         </q-td>
       </template>
       <!-- 是否启用 -->
@@ -107,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useConfigStore } from 'src/stores/config'
 import { useUserStore } from 'src/stores/user'
 import { $success } from 'src/utils/notify'
@@ -235,6 +237,7 @@ const loading = ref(false)
 const pagination = ref({ page: 1, rowsPerPage: props.pageSize, rowsNumber: 0 })
 const selected = ref([])
 const searchParams = ref({ ...props.param })
+const tableRoot = ref(null)
 // 表单对话框状态
 const showFormDialog = ref(false)
 const dialogMode = ref('add') // 'add' | 'edit'
@@ -279,6 +282,10 @@ async function fetchData(isSearch) {
       tableData.value = res.data
       pagination.value.rowsNumber = res.total
       if (!isSearch) formatColumns(res.columns)
+      // 渲染完成后处理图像单元格
+      nextTick(() => {
+        processImageCells()
+      })
     }
   })/*.catch(error => {
     // $error('加载数据失败: ' + error.message)
@@ -476,9 +483,99 @@ const handleToggle = (val, row) => {
 
 // 字段长度处理
 const isTooLong = (attr) => {
-  const tl = !attr.col.name.includes('image_url') || !props.title.includes('轨迹')
   const str = attr.value
+  // 如果是图像路径，则不进行长度截断，交由图像替换逻辑处理
+  if (str && typeof str === 'string' && isImageValue(str)) return false
+  const tl = !attr.col.name.includes('image_url') || !props.title.includes('轨迹')
   return tl && str && typeof str === 'string' && str.length > 36
+}
+
+// 判断是否为图像路径
+function isImageValue(val) {
+  if (!val || typeof val !== 'string') return false
+  const cleaned = val.split('?')[0].split('#')[0].trim().toLowerCase()
+  return /(\.png|\.jpg|\.jpeg|\.webp|\.gif|\.bmp|\.tiff|\.ico)$/i.test(cleaned)
+}
+
+// 将单元格替换为图像
+const imageClientRef = { current: null }
+const tableHelperRef = { current: null }
+
+async function ensureImageHelper() {
+  if (tableHelperRef.current && imageClientRef.current) return true
+
+  let ImageAccessClient = window?.ImageAccessClient
+  let TableImageHelper = window?.TableImageHelper
+
+  // 动态加载依赖，确保顺序：chunker -> image_client -> table_helper
+  try {
+    if (!window?.WebRTCChunker) {
+      await import('../utils/webrtc_chunker.js')
+    }
+    if (!ImageAccessClient) {
+      await import('../utils/image_access_client.js')
+      ImageAccessClient = window?.ImageAccessClient
+    }
+    if (!TableImageHelper) {
+      await import('../utils/table_image_helper.js')
+      TableImageHelper = window?.TableImageHelper
+    }
+  } catch (e) {
+    console.warn('加载图像助手依赖失败，使用<img>回退:', e)
+    return false
+  }
+
+  if (ImageAccessClient && TableImageHelper) {
+    const is = configStore.internal_server || {}
+    imageClientRef.current = new ImageAccessClient({
+      INTERNAL_IP: is.INTERNAL_IP || '172.31.144.2',
+      INTERNAL_PORT: is.INTERNAL_PORT || 5002,
+      SIGNALING_URL: is.SIGNALING_URL || 'ws://120.55.85.213:8081',
+      AUTH_URL: is.AUTH_URL || 'http://120.55.85.213:8081',
+      API_KEY: 'mcjEy9XSi1PRr8kQGfJNDa6vx1F1Rwl1BdtN4gWS7XjBLrVsIRJWjuXJpIWdn4hj',
+      IMAGE_ENDPOINT: is.IMAGE_ENDPOINT || '/api/images/by-path',
+      LAN_TIMEOUT_MS: is.LAN_TIMEOUT_MS || 3500,
+      LOG_ENABLED: false,
+    })
+    tableHelperRef.current = new TableImageHelper(imageClientRef.current)
+    // 预检测网络（可忽略错误）
+    try { await imageClientRef.current.detectNetworkMode() } catch (e) { void e }
+    return true
+  }
+  return false
+}
+
+function simpleReplaceCellWithImg(cellEl, size = '80px') {
+  const originalPath = (cellEl.textContent || '').trim()
+  const safePath = originalPath
+  cellEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;width:${size};height:${size};">
+      <img src="${safePath}" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:4px;" alt="image" title="${originalPath}">
+    </div>
+  `
+}
+
+async function processImageCells() {
+  if (!tableRoot?.value) return
+  const cells = tableRoot.value.querySelectorAll('.si-image-cell')
+  if (!cells || cells.length === 0) return
+
+  const canUseHelper = await ensureImageHelper()
+  cells.forEach((cell) => {
+    if (canUseHelper) {
+      // 使用 TableImageHelper 串行替换为实际图像
+      tableHelperRef.current.replaceWithImage(cell, {
+        maxSize: '96px',
+        maintainAspectRatio: true,
+        fit: 'contain',
+        showOriginalPath: false,
+        showFileInfo: false,
+      })
+    } else {
+      // 兜底：直接用 <img src> 替换
+      simpleReplaceCellWithImg(cell, '96px')
+    }
+  })
 }
 // 分页/排序请求
 function onRequest(props) {

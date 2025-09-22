@@ -16,7 +16,8 @@ export default defineConfig((ctx) => {
       'i18n',
       'axios',
       'bus',
-      'echarts'
+      'echarts',
+      'imageHelpers'
     ],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css

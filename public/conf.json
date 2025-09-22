@@ -11,6 +11,14 @@
     "eyes_server": {
       "base_url": "https://mgt.spaceinsight.cn/v1/",
       "server_name": "eyes message server"
+    },
+    "internal_server": {
+      "INTERNAL_IP": "172.31.144.1",
+      "INTERNAL_PORT": 5002,
+      "SIGNALING_URL": "ws://120.55.85.213:8081",
+      "AUTH_URL": "http://120.55.85.213:8081",
+      "IMAGE_ENDPOINT": "/api/images/by-path",
+      "LAN_TIMEOUT_MS": 3500
     }
   },
   "default_printer_config": {

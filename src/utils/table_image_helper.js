@@ -241,7 +241,10 @@ class TableImageHelper {
      */
     async replaceWithImage(cellElement, options = {}) {
         const defaultOptions = {
-            imageSize: '100px',
+            imageSize: '100px',            // 兼容旧参数（固定宽高）
+            maxSize: '100px',              // 新参数：最大边尺寸，保持比例缩放
+            maintainAspectRatio: true,     // 保持原图比例
+            fit: 'contain',                // contain/cover，用于保持比例时的适配方式
             showOriginalPath: true,
             showFileInfo: false,
             errorPlaceholder: '❌'
@@ -268,8 +271,9 @@ class TableImageHelper {
         }
 
         // 显示加载状态
+        const maxSize = config.maxSize || config.imageSize
         cell.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; width: ${config.imageSize}; height: ${config.imageSize}; color: #666; font-size: 12px;">
+            <div style="display: flex; align-items: center; justify-content: center; width: ${config.maintainAspectRatio ? maxSize : config.imageSize}; height: ${config.maintainAspectRatio ? maxSize : config.imageSize}; color: #666; font-size: 12px; margin: 0 auto;">
                 加载中...
             </div>
         `;
@@ -279,12 +283,25 @@ class TableImageHelper {
             const result = await this.imageClient.fetchImageWithRetry(fileId, 1);
 
             // 构建显示内容
-            let content = `
-                <img src="${result.objectUrl}"
-                     style="width: ${config.imageSize}; height: ${config.imageSize}; object-fit: cover; border-radius: 4px;"
-                     alt="图像"
-                     title="${originalPath}">
-            `;
+            let content = ''
+            if (config.maintainAspectRatio) {
+                const ms = maxSize
+                content = `
+                    <div style="display:flex;align-items:center;justify-content:center;width:${ms};height:${ms};margin:0 auto;">
+                        <img src="${result.objectUrl}"
+                             style="max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: ${config.fit || 'contain'}; border-radius: 4px;"
+                             alt="图像"
+                             title="${originalPath}">
+                    </div>
+                `
+            } else {
+                content = `
+                    <img src="${result.objectUrl}"
+                         style="width: ${config.imageSize}; height: ${config.imageSize}; object-fit: cover; border-radius: 4px;"
+                         alt="图像"
+                         title="${originalPath}">
+                `
+            }
 
             if (config.showOriginalPath) {
                 content += `<div style="font-size: 10px; color: #666; margin-top: 2px; max-width: ${config.imageSize}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${originalPath}</div>`;
@@ -301,7 +318,7 @@ class TableImageHelper {
         } catch (error) {
             console.error('图像加载失败:', error);
             cell.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: center; width: ${config.imageSize}; height: ${config.imageSize}; color: #f87171;">
+                <div style="display: flex; align-items: center; justify-content: center; width: ${config.maintainAspectRatio ? maxSize : config.imageSize}; height: ${config.maintainAspectRatio ? maxSize : config.imageSize}; color: #f87171; margin: 0 auto;">
                     ${config.errorPlaceholder}
                 </div>
                 ${config.showOriginalPath ? `<div style="font-size: 10px; color: #666; margin-top: 2px;">${originalPath}</div>` : ''}
