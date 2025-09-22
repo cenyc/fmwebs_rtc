@@ -6,6 +6,7 @@ export const useConfigStore = defineStore('config', {
     main_server: '',
     eyes_server: '',
     internal_server: {
+      // INTERNAL_IP 可为空（使用租户私网IP优先）
       INTERNAL_IP: '',
       INTERNAL_PORT: 0,
       SIGNALING_URL: '',

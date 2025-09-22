@@ -112,6 +112,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useConfigStore } from 'src/stores/config'
 import { useUserStore } from 'src/stores/user'
+import { useInternalServerStore } from 'src/stores/internal_server'
 import { $success } from 'src/utils/notify'
 import { formatDate } from 'src/utils/tools'
 import SIDialog from './SIDialog.vue'
@@ -226,6 +227,7 @@ const props = defineProps({
 
 const configStore = useConfigStore()
 const userStore = useUserStore()
+const internalStore = useInternalServerStore()
 // const emit = defineEmits(['refresh'])
 const api = props.svr === 'login' ? apiLogin : apiMain
 // 表格数据状态
@@ -526,15 +528,20 @@ async function ensureImageHelper() {
   }
 
   if (ImageAccessClient && TableImageHelper) {
-    const is = configStore.internal_server || {}
+    // 确保 API Key 有效（过期则刷新），并使用租户私网IP
+    await internalStore.getValidApiKey(userStore.tenant_id)
+    const is = { ...configStore.internal_server }
+    if (internalStore.effectiveInternalIp) {
+      is.INTERNAL_IP = internalStore.effectiveInternalIp
+    }
     imageClientRef.current = new ImageAccessClient({
-      INTERNAL_IP: is.INTERNAL_IP || '172.31.144.2',
-      INTERNAL_PORT: is.INTERNAL_PORT || 5002,
-      SIGNALING_URL: is.SIGNALING_URL || 'ws://120.55.85.213:8081',
-      AUTH_URL: is.AUTH_URL || 'http://120.55.85.213:8081',
-      API_KEY: 'mcjEy9XSi1PRr8kQGfJNDa6vx1F1Rwl1BdtN4gWS7XjBLrVsIRJWjuXJpIWdn4hj',
-      IMAGE_ENDPOINT: is.IMAGE_ENDPOINT || '/api/images/by-path',
-      LAN_TIMEOUT_MS: is.LAN_TIMEOUT_MS || 3500,
+      INTERNAL_IP: is.INTERNAL_IP || undefined,
+      INTERNAL_PORT: is.INTERNAL_PORT,
+      SIGNALING_URL: is.SIGNALING_URL,
+      AUTH_URL: is.AUTH_URL,
+      API_KEY: internalStore.api_key,
+      IMAGE_ENDPOINT: is.IMAGE_ENDPOINT,
+      LAN_TIMEOUT_MS: is.LAN_TIMEOUT_MS,
       LOG_ENABLED: false,
     })
     tableHelperRef.current = new TableImageHelper(imageClientRef.current)

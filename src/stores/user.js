@@ -3,6 +3,7 @@ import { addDynamicRoute } from "src/router";
 import { useConfigStore } from './config'
 import auth from "src/api/auth";
 import main from 'src/api/main'
+import { useInternalServerStore } from './internal_server'
 import xxtea from "src/utils/xxtea";
 const options = {
   state: () => ({
@@ -33,6 +34,12 @@ const options = {
       this.tenant_id = user.tenant_id
       this.is_system = user.is_system
       this.setAvatar(user.id)
+      // 初始化内部机默认配置并记录租户
+      try {
+        const internal = useInternalServerStore()
+        internal.loadDefaultsFromConfig()
+        internal.setTenant(user.tenant_id)
+      } catch (err) { void err }
     },
     setAvatar(userId) {
       // 处理头像
@@ -179,6 +186,11 @@ const options = {
           }
           // 设置token
           this.setUser(res)
+          // 登录成功后刷新租户内部机信息（ApiKeys、Client.ip_private）
+          try {
+            const internal = useInternalServerStore()
+            internal.refreshFromBackend(res.tenant_id, this.token)
+          } catch (err) { void err }
           this.getMenu().then(() => {
             resolve(res);
           }).catch(err => {
