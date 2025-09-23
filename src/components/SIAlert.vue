@@ -9,7 +9,7 @@
       </q-card-section>
       <q-card-section>
         <q-form>
-          <q-img :src="message.capture_image_url" style="width: 402px; height: 233px;" />
+          <q-img :src="previewUrl || dialogImgSrc" style="width: 402px; height: 233px;" />
           <q-btn color="primary" rounded outline label="轨迹跟踪" class="q-ml-md"
             style="width:100px;min-height:30px;margin-top:200px;background: rgba(95, 148, 255, 0.1)!important"
             @click="showDialog = false" :to="`/inventory_history?matched_profile_id=${message.matched_profile_id}`" />
@@ -52,8 +52,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useWebSocketStore } from 'src/stores/ws'
+import { useInternalServerStore } from 'src/stores/internal_server'
 import { formatDate } from 'src/utils/tools'
 const wsStore = useWebSocketStore()
+const internal = useInternalServerStore()
 // 按钮颜色
 const colors = [
   '#FF6D65',
@@ -73,6 +75,34 @@ const showDialog = computed({
   set: (val) => emit('update:modelValue', val)
 })
 const message = computed(() => wsStore.custom || wsStore.alert || {})
+// 兼容不同字段名：优先 capture_image_url，其次 image_url、image_path
+const dialogImgSrc = computed(() => {
+  const m = message.value || {}
+  return m.capture_image_url || m.image_url || m.image_path || wsStore.item?.capture_image_url || wsStore.item?.image_url || wsStore.item?.image_path || ''
+})
+
+// 如同表格中图片一样，若是内部机路径，优先用内部机客户端生成可访问的 URL 预览
+const previewUrl = computed(() => {
+  const p = dialogImgSrc.value
+  if (!p) return ''
+  // 简单判断：不是 http(s) 且是常见图片后缀 → 认为是内部路径
+  const isHttp = /^https?:\/\//i.test(p)
+  const isImg = /(\.png|\.jpg|\.jpeg|\.webp|\.gif|\.bmp|\.tiff|\.ico)$/i.test(p.split('?')[0])
+  if (isHttp || !isImg) return p
+  // 使用内部机直链（若已知私网IP），否则回退原路径
+  const ip = internal.effectiveInternalIp
+  const endpoint = internal.IMAGE_ENDPOINT || '/api/images/by-path'
+  try {
+    if (ip) {
+      const port = internal.INTERNAL_PORT
+      const proto = 'http://'
+      const base = port ? `${proto}${ip}:${port}` : `${proto}${ip}`
+      const url = `${base}${endpoint}?path=${encodeURIComponent(p)}`
+      return url
+    }
+  } catch (err) { void err }
+  return p
+})
 const initFormData = () => {
   // 初始化表单数据
 }

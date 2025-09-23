@@ -54,7 +54,7 @@
         <q-td :props="props" v-else>
           <div v-if="props.col.name.endsWith('_time') || props.col.name.endsWith('_at')">{{ formatDate(props.value) }}</div>
           <template v-else>
-            <div v-if="isImageValue(props.value)" class="si-image-cell" style="display:flex;justify-content:center;">{{ props.value }}</div>
+            <div v-if="isImageValue(props.value)" class="si-image-cell" style="display:flex;justify-content:center;cursor:zoom-in;">{{ props.value }}</div>
             <slot v-else name="body-cell" v-bind="props">
               {{ props.value }}
             </slot>
@@ -105,11 +105,29 @@
       </template>
     </SIDialog>
 
+    <q-dialog v-model="imagePreviewOpen">
+      <q-card style="max-width: 90vw; max-height: 90vh;">
+        <q-card-section>
+          <div class="row items-center no-wrap">
+            <div class="text-subtitle2">{{ imagePreviewTitle || '图片预览' }}</div>
+            <q-space />
+            <q-btn icon="close" flat round dense v-close-popup />
+          </div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="q-pa-none">
+          <div style="display:flex;align-items:center;justify-content:center;max-height:80vh;overflow:auto;">
+            <img :src="imagePreviewSrc" :alt="imagePreviewTitle" style="max-width: 90vw; max-height: 80vh; display:block;">
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useConfigStore } from 'src/stores/config'
 import { useUserStore } from 'src/stores/user'
 import { useInternalServerStore } from 'src/stores/internal_server'
@@ -245,6 +263,33 @@ const showFormDialog = ref(false)
 const dialogMode = ref('add') // 'add' | 'edit'
 const currentItem = ref({})
 
+// 图片预览弹窗
+const imagePreviewOpen = ref(false)
+const imagePreviewSrc = ref('')
+const imagePreviewTitle = ref('')
+
+function openImagePreview(src, title = '') {
+  if (!src) return
+  imagePreviewSrc.value = src
+  imagePreviewTitle.value = title
+  imagePreviewOpen.value = true
+}
+
+function handleImageClick(ev) {
+  const target = ev.target
+  if (!target || !(target instanceof Element)) return
+  const cell = target.closest('.si-image-cell')
+  if (!cell) return
+  const img = target.tagName === 'IMG' ? target : cell.querySelector('img')
+  if (img && img.getAttribute) {
+    ev.preventDefault()
+    ev.stopPropagation()
+    const src = img.getAttribute('src') || ''
+    const title = img.getAttribute('title') || ''
+    openImagePreview(src, title)
+  }
+}
+
 // 计算对话框标题
 const dialogTitle = computed(() => {
   // return dialogMode.value === 'add' ? `新增${props.title || '记录'}` : `编辑${props.title || '记录'}`
@@ -269,6 +314,15 @@ const visibleColumns = computed(() =>
 // 初始化加载数据
 onMounted(() => {
   fetchData()
+  if (tableRoot?.value) {
+    tableRoot.value.addEventListener('click', handleImageClick)
+  }
+})
+
+onUnmounted(() => {
+  if (tableRoot?.value) {
+    tableRoot.value.removeEventListener('click', handleImageClick)
+  }
 })
 
 // 获取表格数据
@@ -536,6 +590,7 @@ async function ensureImageHelper() {
     }
     imageClientRef.current = new ImageAccessClient({
       INTERNAL_IP: is.INTERNAL_IP || undefined,
+      // INTERNAL_IP: "172.2.2.5",
       INTERNAL_PORT: is.INTERNAL_PORT,
       SIGNALING_URL: is.SIGNALING_URL,
       AUTH_URL: is.AUTH_URL,
@@ -557,7 +612,7 @@ function simpleReplaceCellWithImg(cellEl, size = '80px') {
   const safePath = originalPath
   cellEl.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:center;width:${size};height:${size};">
-      <img src="${safePath}" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:4px;" alt="image" title="${originalPath}">
+      <img src="${safePath}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="image" title="${originalPath}">
     </div>
   `
 }
@@ -572,9 +627,9 @@ async function processImageCells() {
     if (canUseHelper) {
       // 使用 TableImageHelper 串行替换为实际图像
       tableHelperRef.current.replaceWithImage(cell, {
-        maxSize: '96px',
+        maxSize: '120px',
         maintainAspectRatio: true,
-        fit: 'contain',
+        fit: 'cover',
         showOriginalPath: false,
         showFileInfo: false,
       })
