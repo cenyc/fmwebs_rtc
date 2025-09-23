@@ -40,7 +40,7 @@ class ImageAccessClient {
 
     _initChunker() {
         // 检查是否已加载 WebRTCChunker
-        if (typeof WebRTCChunker === 'undefined') {
+        if (typeof globalThis === 'undefined' || typeof globalThis.WebRTCChunker === 'undefined') {
             console.warn('WebRTCChunker not found. Please include webrtc_chunker.js before this script.');
         }
     }
@@ -196,7 +196,7 @@ class ImageAccessClient {
                 }
                 this._log(`局域网服务器正常，图片数量: ${statusData.images_count || 0}`, 'info');
                 return { success: true };
-            } catch (parseError) {
+            } catch {
                 // 即使解析失败，但响应OK，认为服务器可达
                 this._log('状态响应解析失败，但服务器可达', 'warning');
                 return { success: true };
@@ -376,7 +376,7 @@ class ImageAccessClient {
                     };
                 }
                 this._log(`局域网服务器正常，图片数量: ${statusData.images_count || 0}`, 'info');
-            } catch (parseError) {
+            } catch {
                 this._log('状态响应解析失败，但服务器可达', 'warning');
             }
 
@@ -445,7 +445,7 @@ class ImageAccessClient {
                 return data.success && data.status === 'running';
             }
             return false;
-        } catch (error) {
+        } catch {
             return false;
         }
     }
@@ -957,8 +957,8 @@ class RemoteAccessClient {
     handleDataChannelOpen() {
         this.log('数据通道已建立', 'success');
 
-        if (typeof WebRTCChunker !== 'undefined') {
-            this.chunker = new WebRTCChunker(8000, 30000, 3);
+        if (typeof globalThis !== 'undefined' && typeof globalThis.WebRTCChunker !== 'undefined') {
+            this.chunker = new globalThis.WebRTCChunker(8000, 30000, 3);
         }
         this.apiClient = new RemoteAPIClient(this.dataChannel, this.chunker, this.log);
 
@@ -1029,11 +1029,11 @@ class RemoteAccessClient {
             this.apiClient = null;
         }
         if (this.dataChannel) {
-            try { this.dataChannel.close(); } catch (_) {}
+            try { this.dataChannel.close(); } catch (e) { void e; }
             this.dataChannel = null;
         }
         if (this.peerConnection) {
-            try { this.peerConnection.close(); } catch (_) {}
+            try { this.peerConnection.close(); } catch (e) { void e; }
             this.peerConnection = null;
         }
         this.chunker = null;
@@ -1053,7 +1053,7 @@ class RemoteAccessClient {
     close() {
         this.cleanupPeerConnection();
         if (this.ws) {
-            try { this.ws.close(); } catch (_) {}
+            try { this.ws.close(); } catch (e) { void e; }
             this.ws = null;
         }
         this.resetConnectPromise();
