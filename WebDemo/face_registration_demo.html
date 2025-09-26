@@ -1,0 +1,3130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人脸手动录入系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            align-items: center;
+        }
+
+        .section h2 .icon {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .grid-three {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid, .grid-three {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+            color: #212529;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-success { background: #28a745; }
+        .status-error { background: #dc3545; }
+        .status-warning { background: #ffc107; }
+        .status-info { background: #17a2b8; }
+
+        .video-container {
+            width: 100%;
+            height: 350px;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+
+        .video-placeholder {
+            color: #666;
+            font-size: 1.2em;
+            text-align: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .capture-area {
+            position: relative;
+            text-align: center;
+        }
+
+        .captured-image {
+            max-width: 100%;
+            max-height: 400px; /* 增加最大高度，减少过度缩放 */
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: block;
+            object-fit: contain; /* 确保图像完整显示 */
+            /* 避免图像被压缩变形 */
+        }
+
+        .face-detection-overlay {
+            position: relative;
+            display: block;
+            text-align: center;
+            /* 避免inline-block造成的定位问题 */
+        }
+
+        .face-box {
+            position: absolute;
+            border: 3px solid #28a745;
+            background: rgba(40, 167, 69, 0.1);
+            pointer-events: none;
+        }
+
+        .face-confidence {
+            position: absolute;
+            background: rgba(40, 167, 69, 0.9);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            top: -25px;
+            left: 0;
+        }
+
+        .log-area {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-info { color: #17a2b8; }
+        .log-success { color: #28a745; }
+        .log-warning { color: #ffc107; }
+        .log-error { color: #dc3545; }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+
+        .step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            top: 15px;
+            right: -50%;
+            width: 100%;
+            height: 2px;
+            background: #e9ecef;
+            z-index: -1;
+        }
+
+        .step.active:not(:last-child)::after {
+            background: #667eea;
+        }
+
+        .step-circle {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #e9ecef;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 8px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .step.active .step-circle {
+            background: #667eea;
+            color: white;
+        }
+
+        .step.completed .step-circle {
+            background: #28a745;
+            color: white;
+        }
+
+        .step-text {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .step.active .step-text {
+            color: #667eea;
+        }
+
+        .step.completed .step-text {
+            color: #28a745;
+        }
+
+        .registration-form {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .required {
+            color: #dc3545;
+        }
+
+        .device-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .device-info h4 {
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .validation-error {
+            color: #dc3545;
+            font-size: 12px;
+            margin-top: 5px;
+            min-height: 16px;
+        }
+
+        .form-group input.error,
+        .form-group select.error {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
+        .form-group input.valid,
+        .form-group select.valid {
+            border-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧑‍💼 人脸手动录入系统</h1>
+            <p>用于人脸采集和人员信息录入的完整解决方案</p>
+        </div>
+
+        <!-- 进度指示器 -->
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <div class="step-circle">1</div>
+                <div class="step-text">服务器配置</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-circle">2</div>
+                <div class="step-text">连接摄像头</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-circle">3</div>
+                <div class="step-text">人脸拍摄</div>
+            </div>
+            <div class="step" id="step4">
+                <div class="step-circle">4</div>
+                <div class="step-text">信息录入</div>
+            </div>
+            <div class="step" id="step5">
+                <div class="step-circle">5</div>
+                <div class="step-text">完成入库</div>
+            </div>
+        </div>
+
+        <!-- 服务器配置区域 -->
+        <div class="section">
+            <h2><span class="icon">⚙️</span>服务器配置</h2>
+            <div class="grid">
+                <div>
+                    <div class="form-group">
+                        <label for="signalingUrl">信令服务器地址:</label>
+                        <input type="text" id="signalingUrl" value="ws://120.55.85.213:8081" placeholder="ws://服务器IP:端口">
+                    </div>
+                    <div class="form-group">
+                        <label for="authUrl">认证服务器地址:</label>
+                        <input type="text" id="authUrl" value="http://120.55.85.213:8081" placeholder="http://服务器IP:端口">
+                    </div>
+                    <div class="form-group">
+                        <label for="internalIp">内部机IP(直连用):</label>
+                        <input type="text" id="internalIp" value="192.168.50.44" placeholder="例如 192.168.50.44">
+                    </div>
+                </div>
+                <div>
+                    <div class="form-group">
+                        <label for="apiKey">API Key <span class="required">*</span>:</label>
+                        <input type="password" id="apiKey" placeholder="输入API Key">
+                    </div>
+                    <div class="form-group">
+                        <label>客户端ID:</label>
+                        <input type="text" id="clientId" readonly>
+                    </div>
+                </div>
+            </div>
+            <button class="btn" id="connectBtn" onclick="startConnection()">
+                <span class="loading-spinner hidden" id="connectSpinner"></span>
+                开始连接
+            </button>
+            <button class="btn btn-secondary hidden" id="cancelBtn" onclick="cancelConnection()">
+                ❌ 取消连接
+            </button>
+        </div>
+
+        <!-- 连接状态和摄像头信息 -->
+        <div class="section">
+            <h2><span class="icon">📡</span>连接状态</h2>
+            <div class="grid">
+                <div>
+                    <p><span class="status-indicator" id="authStatus"></span><span id="authStatusText">等待认证</span></p>
+                    <p><span class="status-indicator" id="signalingStatus"></span><span id="signalingStatusText">等待连接</span></p>
+                    <p><span class="status-indicator" id="cameraStatus"></span><span id="cameraStatusText">等待获取摄像头</span></p>
+                    
+                    <!-- 连接提示信息 -->
+                    <div id="connectionHint" class="alert alert-warning" style="display: none; margin-top: 15px;">
+                        <h4 style="margin-bottom: 10px;">📝 连接提示</h4>
+                        <div id="connectionHintText"></div>
+                    </div>
+                </div>
+                <div id="deviceInfo" class="device-info hidden">
+                    <h4>已连接摄像头</h4>
+                    <div id="deviceDetails"></div>
+                </div>
+            </div>
+            <!-- 手动录入摄像头选择区域（在发现多个手动录入摄像头时显示） -->
+            <div id="manualCameraSelection" class="device-info hidden" style="margin-top: 15px;">
+                <h4>选择“手动录入”摄像头</h4>
+                <div class="form-group">
+                    <label for="cameraSelect">可用摄像头:</label>
+                    <select id="cameraSelect"></select>
+                </div>
+                <button class="btn btn-success" id="connectCameraBtn" onclick="connectSelectedCamera()" disabled>
+                    连接所选摄像头
+                </button>
+                <button class="btn btn-success hidden" id="connectLanCameraBtn" onclick="connectSelectedLanCamera()">
+                    连接所选摄像头（直连）
+                </button>
+            </div>
+        </div>
+
+        <!-- 人脸拍摄和信息录入 -->
+        <div class="section">
+            <h2><span class="icon">👤</span>人脸拍摄和信息录入</h2>
+            <div class="grid">
+                <!-- 左侧：视频拍摄区域 -->
+                <div>
+                    <h3>实时视频流</h3>
+                    <div class="video-container" id="videoContainer">
+                        <div class="video-placeholder">
+                            <div style="font-size: 3em; margin-bottom: 20px;">📹</div>
+                            <div>等待连接摄像头...</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" id="captureBtn" onclick="captureImage()" disabled>
+                        📸 拍摄图像
+                    </button>
+                    <button class="btn" id="uploadBtn" onclick="openImageUpload()">
+                        🖼️ 人脸图像上传
+                    </button>
+                    <input type="file" id="uploadInput" accept="image/*" class="hidden" />
+                    
+                    <h3 style="margin-top: 20px;">拍摄结果</h3>
+                    <div class="capture-area" id="captureArea">
+                        <p id="captureHint">请先连接摄像头并点击拍摄或上传按钮</p>
+                    </div>
+                </div>
+
+                <!-- 右侧：人员信息录入表单 -->
+                <div>
+                    <h3>人员信息录入</h3>
+                    <div class="registration-form">
+                        <div id="formValidationMessage" class="alert alert-warning" style="display: none;"></div>
+                        
+                        <div class="form-group">
+                            <label for="personName">姓名 <span class="required">*</span>:</label>
+                            <input type="text" id="personName" placeholder="请输入姓名" required>
+                            <div class="validation-error" id="personNameError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="personType">人员类型 <span class="required">*</span>:</label>
+                            <select id="personType" required>
+                                <option value="">请选择人员类型</option>
+                            </select>
+                            <div class="validation-error" id="personTypeError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="roomId">房间号:</label>
+                            <input type="text" id="roomId" placeholder="请输入房间号">
+                            <div class="validation-error" id="roomIdError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="phoneNumber">手机号:</label>
+                            <input type="tel" id="phoneNumber" placeholder="请输入11位手机号">
+                            <div class="validation-error" id="phoneNumberError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="idCardNumber">身份证号:</label>
+                            <input type="text" id="idCardNumber" placeholder="请输入18位身份证号">
+                            <div class="validation-error" id="idCardNumberError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="location">录入位置:</label>
+                            <input type="text" id="location" placeholder="等待摄像头连接..." readonly>
+                            <div class="validation-error" id="locationError"></div>
+                        </div>
+                        
+                        <!-- 直连模式：设备ID输入 -->
+                        <div class="form-group hidden" id="deviceIdGroup">
+                            <label for="deviceIdInput">设备ID (直连模式) <span class="required">*</span>:</label>
+                            <input type="text" id="deviceIdInput" placeholder="请输入用于入库的设备ID">
+                            <div class="validation-error" id="deviceIdError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button class="btn btn-success" id="submitBtn" onclick="submitRegistration()" disabled>
+                                💾 提交入库
+                            </button>
+                            <button class="btn btn-warning" onclick="resetForm()">
+                                🔄 重新拍摄
+                            </button>
+                        </div>
+                        <div id="registrationResult"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 进度条 -->
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <!-- 日志区域 -->
+        <div class="section">
+            <h2><span class="icon">📋</span>操作日志</h2>
+            <button class="btn btn-warning" onclick="clearLogs()">清空日志</button>
+            <div class="log-area" id="logArea"></div>
+        </div>
+    </div>
+
+    <!-- 引入分片处理器 -->
+    <script src="webrtc_chunker.js"></script>
+    <script>
+        // 全局变量
+        let authToken = null;
+        let ws = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let apiClient = null;
+        let webrtcChunker = null;
+        let selectedClient = null;
+        let selectedCamera = null;
+        let selectedCameraType = 'local';
+        let clientID = generateClientId();
+        let currentStep = 1;
+        let profileTypes = [];
+        let capturedImageData = null;
+        let croppedFaceImageData = null;  // 存储裁剪后的人脸图像
+        let detectedFaces = [];
+        let deviceId = null;
+        let profileTypesLoaded = false;  // 添加人员类型加载状态标记
+        let isProcessing = false;        // 添加处理状态标记，防止并发请求
+        let networkMode = 'remote';      // 'lan' 或 'remote'
+        let manualCameras = [];          // 发现的手动录入摄像头列表
+        let pendingConnectResolve = null; // 延迟resolve以等待用户选择摄像头
+        let pendingConnectReject = null;  // 延迟reject以等待用户选择摄像头
+        
+        // 连接状态和重连相关变量
+        let connectionTimeout = null;    // 连接超时定时器
+        let videoStreamTimeout = null;   // 视频流超时定时器
+        let reconnectAttempts = 0;       // 重连尝试次数
+        let maxReconnectAttempts = 3;    // 最大重连次数
+        let isReconnecting = false;      // 是否正在重连
+        let connectionStartTime = 0;     // 连接开始时间
+        let isConnectionEstablished = false;  // 连接是否已建立
+        let localStream = null;          // 本机摄像头流（直连模式）
+        let lanBaseUrl = null;           // 局域网直连API基地址
+        let lanPreviewTimer = null;      // 局域网快照预览定时器
+        let lanCameras = [];             // 局域网摄像头列表（手动录入）
+
+        // WebRTC配置 - 修复mDNS解析问题并添加原始TURN服务器
+        const rtcConfig = {
+            iceServers: [
+                // 核心STUN服务器 - 优先使用多个Google STUN服务器
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+                // 添加备用STUN服务器提高成功率
+                { urls: 'stun:stun.cloudflare.com:3478' },
+                { urls: 'stun:stun.nextcloud.com:443' },
+                // 自定义TURN服务器（主要中继服务器）
+                { 
+                    urls: ['turn:120.55.85.213:3478?transport=udp', 'turn:120.55.85.213:3478?transport=tcp'], 
+                    username: "cenyc", 
+                    credential: "cenyc" 
+                },
+                // 公共TURN服务器作为备选 - 提供多协议支持
+                { 
+                    urls: ['turn:openrelay.metered.ca:80?transport=tcp', 'turn:openrelay.metered.ca:80?transport=udp'], 
+                    username: "openrelayproject", 
+                    credential: "openrelayproject" 
+                },
+                { 
+                    urls: ['turn:openrelay.metered.ca:443?transport=tcp'], 
+                    username: "openrelayproject", 
+                    credential: "openrelayproject" 
+                },
+                // 更多备用TURN服务器
+                { 
+                    urls: 'turn:relay1.expressturn.com:3478', 
+                    username: "ef3JIJDP8D8N2VGL6Y", 
+                    credential: "zGEhi6EL8mTIJlm8" 
+                }
+            ],
+            // 优化ICE配置参数 - 允许所有连接类型但避免mDNS
+            iceCandidatePoolSize: 10,        // 预生成更多ICE候选
+            bundlePolicy: 'max-bundle',      // 最大化媒体流复用
+            rtcpMuxPolicy: 'require',        // 强制RTCP复用
+            iceTransportPolicy: 'all'        // 允许所有传输类型以提高连接成功率
+        };
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('clientId').value = clientID;
+            log('系统初始化完成', 'info');
+            log(`客户端ID: ${clientID}`, 'info');
+            updateProgress(0);
+            
+            // 绑定表单验证事件
+            setupFormValidation();
+
+            // 绑定上传事件
+            const uploadInput = document.getElementById('uploadInput');
+            if (uploadInput) {
+                uploadInput.addEventListener('change', handleImageFileChange);
+            }
+        });
+        
+        // HTTP直连 API 客户端
+        class HttpAPIClient {
+            constructor(baseUrl) {
+                this.baseUrl = baseUrl.replace(/\/$/, '');
+            }
+            async get(endpoint) {
+                const url = this.baseUrl + endpoint;
+                const resp = await fetch(url, { method: 'GET' });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                return await resp.json();
+            }
+            async post(endpoint, data) {
+                const url = this.baseUrl + endpoint;
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const json = await resp.json().catch(() => ({ success: false, error: 'Invalid JSON' }));
+                if (!resp.ok || json.success === false) {
+                    const err = new Error(json.error || json.detail || `HTTP ${resp.status}`);
+                    err.response = json;
+                    throw err;
+                }
+                return json;
+            }
+        }
+
+        // 探测网络环境（优先直连WebAPI）
+        async function detectNetworkEnvironment() {
+            const internalIp = (document.getElementById('internalIp')?.value || '').trim();
+            if (!internalIp) return 'remote';
+            const baseLanUrl = `http://${internalIp}:5001`;
+            const statusUrl = `${baseLanUrl}/api/status`;
+            log(`检测网络环境: 探测 ${statusUrl}`, 'info');
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 2500);
+                const resp = await fetch(statusUrl, { signal: controller.signal, cache: 'no-store' });
+                clearTimeout(timer);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json().catch(() => ({}));
+                if (data && data.success) {
+                    log('检测到局域网可直连WebAPI，将走直连模式', 'success');
+                    return 'lan';
+                }
+            } catch (e) {
+                log(`直连探测失败，使用WebRTC远程模式: ${e.message}`, 'warning');
+            }
+            return 'remote';
+        }
+
+        // 启用本机摄像头（直连模式）
+        async function enableLocalCamera() {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    log('当前浏览器不支持摄像头访问', 'error');
+                    return;
+                }
+                if (localStream) {
+                    // 已开启
+                    log('本机摄像头已启用', 'info');
+                    return;
+                }
+                const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                let video = document.getElementById('videoContainer').querySelector('video');
+                if (!video) {
+                    video = document.createElement('video');
+                    video.autoplay = true;
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.style.width = '100%';
+                    video.style.height = '100%';
+                    video.style.objectFit = 'contain';
+                    document.getElementById('videoContainer').innerHTML = '';
+                    document.getElementById('videoContainer').appendChild(video);
+                }
+                video.srcObject = localStream;
+                document.getElementById('captureBtn').disabled = false;
+                updateStatus('cameraStatus', 'cameraStatusText', 'success', '已启用本机摄像头');
+                log('✅ 已启用本机摄像头', 'success');
+            } catch (err) {
+                log(`启用本机摄像头失败: ${err.message}`, 'error');
+            }
+        }
+
+        // 加载局域网“手动录入”摄像头列表
+        async function loadLanManualCameras() {
+            try {
+                updateStatus('cameraStatus', 'cameraStatusText', 'warning', '查询局域网摄像头中...');
+                const resp = await apiClient.get('/api/camera/list?func_type=2');
+                if (!resp.success) throw new Error(resp.error || '查询失败');
+
+                lanCameras = resp.devices || [];
+                if (lanCameras.length === 0) {
+                    updateStatus('cameraStatus', 'cameraStatusText', 'error', '未发现手动录入摄像头');
+                    log('未发现func_type=2的摄像头', 'warning');
+                    return;
+                }
+
+                if (lanCameras.length === 1) {
+                    const dev = lanCameras[0];
+                    await setupLanCamera(dev);
+                    return;
+                }
+
+                // 多个：展示选择区（复用原有UI）
+                const container = document.getElementById('manualCameraSelection');
+                const selectEl = document.getElementById('cameraSelect');
+                const webrtcBtn = document.getElementById('connectCameraBtn');
+                const lanBtn = document.getElementById('connectLanCameraBtn');
+                if (container && selectEl && lanBtn) {
+                    container.classList.remove('hidden');
+                    selectEl.innerHTML = '';
+                    lanCameras.forEach((cam, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = String(idx);
+                        opt.textContent = `${cam.name} (${cam.type}) ${cam.resolution} @ ${cam.fps}fps`;
+                        selectEl.appendChild(opt);
+                    });
+                    if (webrtcBtn) webrtcBtn.classList.add('hidden');
+                    lanBtn.classList.remove('hidden');
+                }
+
+                updateStatus('cameraStatus', 'cameraStatusText', 'info', `发现 ${lanCameras.length} 个手动录入摄像头，请选择`);
+            } catch (e) {
+                log(`局域网摄像头查询失败: ${e.message}`, 'error');
+                updateStatus('cameraStatus', 'cameraStatusText', 'error', '查询失败');
+            }
+        }
+
+        async function connectSelectedLanCamera() {
+            try {
+                const selectEl = document.getElementById('cameraSelect');
+                const idx = parseInt(selectEl?.value || '-1');
+                if (isNaN(idx) || idx < 0 || idx >= lanCameras.length) {
+                    log('请选择一个有效的摄像头', 'warning');
+                    return;
+                }
+                await setupLanCamera(lanCameras[idx]);
+            } catch (e) {
+                log(`直连摄像头连接失败: ${e.message}`, 'error');
+            }
+        }
+
+        async function setupLanCamera(dev) {
+            try {
+                // 隐藏选择区
+                const container = document.getElementById('manualCameraSelection');
+                if (container) container.classList.add('hidden');
+
+                // 填充设备信息
+                deviceId = dev.device_id;
+                const deviceInfo = document.getElementById('deviceInfo');
+                const deviceDetails = document.getElementById('deviceDetails');
+                deviceInfo.classList.remove('hidden');
+                deviceDetails.innerHTML = `
+                    <p><strong>设备:</strong> ${dev.name}</p>
+                    <p><strong>位置:</strong> ${dev.location}</p>
+                    <p><strong>类型:</strong> ${dev.type}</p>
+                    <p><strong>分辨率:</strong> ${dev.resolution} @ ${dev.fps}fps</p>
+                `;
+                const locationInput = document.getElementById('location');
+                if (locationInput) locationInput.value = dev.location || dev.name || '人脸录入系统';
+
+                // 启动预览（快照轮询）
+                startLanPreview(dev.device_id);
+
+                // 启用拍摄按钮
+                const capBtn = document.getElementById('captureBtn');
+                capBtn.disabled = false;
+
+                updateStatus('cameraStatus', 'cameraStatusText', 'success', '摄像头已连接（直连）');
+                log(`✅ 已连接直连摄像头: ${dev.name}`, 'success');
+                updateProgress(3);
+            } catch (e) {
+                log(`设置直连摄像头失败: ${e.message}`, 'error');
+                updateStatus('cameraStatus', 'cameraStatusText', 'error', '摄像头连接失败');
+            }
+        }
+
+        function startLanPreview(devId) {
+            try {
+                const videoContainer = document.getElementById('videoContainer');
+                // 先尝试MJPEG流
+                videoContainer.innerHTML = '';
+                const fps = 20;
+                const streamImg = document.createElement('img');
+                streamImg.id = 'lanPreview';
+                streamImg.style.width = '100%';
+                streamImg.style.height = '100%';
+                streamImg.style.objectFit = 'contain';
+                // 若MJPEG失败，回退快照轮询
+                streamImg.onerror = () => {
+                    lanPreviewMode = 'snapshot';
+                    startLanSnapshotPreview(devId);
+                };
+                streamImg.src = `${lanBaseUrl}/api/camera/stream_mjpeg?device_id=${devId}&fps=${fps}&ts=${Date.now()}`;
+                videoContainer.appendChild(streamImg);
+                lanPreviewMode = 'mjpeg';
+                // 清理快照轮询（如果存在）
+                if (lanPreviewTimer) {
+                    clearInterval(lanPreviewTimer);
+                    lanPreviewTimer = null;
+                }
+            } catch (e) {
+                log(`启动直连预览失败: ${e.message}`, 'error');
+            }
+        }
+
+        function startLanSnapshotPreview(devId) {
+            const videoContainer = document.getElementById('videoContainer');
+            videoContainer.innerHTML = '';
+            const img = document.createElement('img');
+            img.id = 'lanPreview';
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'contain';
+            videoContainer.appendChild(img);
+            if (lanPreviewTimer) {
+                clearInterval(lanPreviewTimer);
+                lanPreviewTimer = null;
+            }
+            const update = () => {
+                const ts = Date.now();
+                img.src = `${lanBaseUrl}/api/camera/snapshot?device_id=${devId}&ts=${ts}`;
+            };
+            const interval = 50; // 20fps
+            update();
+            lanPreviewTimer = setInterval(update, interval);
+        }
+
+        // 设置表单验证
+        function setupFormValidation() {
+            const formFields = ['personName', 'personType', 'phoneNumber', 'idCardNumber', 'roomId'];
+            
+            formFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.addEventListener('blur', () => validateField(fieldId));
+                    field.addEventListener('input', () => {
+                        clearFieldError(fieldId);
+                        updateSubmitButton();
+                    });
+                }
+            });
+        }
+
+        // 打开文件选择对话框
+        function openImageUpload() {
+            const input = document.getElementById('uploadInput');
+            if (!input) return;
+
+            if (!apiClient) {
+                log('API客户端未初始化，请先连接服务器/摄像头', 'warning');
+            }
+            input.value = '';
+            input.click();
+        }
+
+        // 处理图像文件选择
+        async function handleImageFileChange(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            // 检查是否正在处理其他请求
+            if (isProcessing) {
+                log('系统正在处理其他请求，请稍后重试', 'warning');
+                return;
+            }
+
+            // 检查人员类型是否已加载
+            if (!profileTypesLoaded && apiClient) {
+                log('人员类型数据尚未加载，正在尝试加载...', 'info');
+                try {
+                    await loadProfileTypes();
+                } catch (e) {
+                    // 忽略，后续逻辑会根据profileTypesLoaded处理
+                }
+            }
+
+            if (!/^image\//.test(file.type)) {
+                log('请选择图片文件（JPG/PNG等）', 'error');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) { // 10MB上限
+                log('图片过大，请选择小于10MB的图片', 'error');
+                return;
+            }
+
+            try {
+                isProcessing = true;  // 设置处理状态
+                log(`开始加载本地图像: ${file.name}`, 'info');
+
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(new Error('读取图片失败'));
+                    reader.readAsDataURL(file);
+                });
+
+                // 使用Image对象获取原图尺寸
+                const imgInfo = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+                    img.onerror = () => reject(new Error('图片加载失败'));
+                    img.src = dataUrl;
+                });
+
+                // 将图像放入拍摄区域并准备检测
+                capturedImageData = dataUrl;
+
+                const captureArea = document.getElementById('captureArea');
+                captureArea.innerHTML = `
+                    <div class="face-detection-overlay" id="faceOverlay">
+                        <img class="captured-image" src="${capturedImageData}" alt="上传的图像" />
+                    </div>
+                    <p style="margin-top: 10px; color: #28a745; font-weight: bold;">
+                        原图尺寸: ${imgInfo.width} x ${imgInfo.height}
+                    </p>
+                    <div id="croppedFacePreview" style="margin-top: 15px; display: none;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">🎯 裁剪后的人脸图像（将入库存储）:</h4>
+                        <img id="croppedFaceImage" class="captured-image" style="max-width: 200px; max-height: 200px;" />
+                    </div>
+                `;
+
+                log(`✅ 本地图像加载成功！尺寸: ${imgInfo.width}x${imgInfo.height}`, 'success');
+                updateProgress(3);
+
+                // 自动进行人脸检测
+                await detectFaces();
+
+            } catch (error) {
+                log(`❌ 图像上传处理失败: ${error.message}`, 'error');
+            } finally {
+                isProcessing = false;  // 清除处理状态
+                updateSubmitButton();
+            }
+        }
+        
+        // 清除字段错误状态
+        function clearFieldError(fieldId) {
+            const field = document.getElementById(fieldId);
+            const errorDiv = document.getElementById(fieldId + 'Error');
+            
+            if (field && errorDiv) {
+                field.classList.remove('error');
+                errorDiv.textContent = '';
+            }
+        }
+        
+        // 设置字段错误状态
+        function setFieldError(fieldId, message) {
+            const field = document.getElementById(fieldId);
+            const errorDiv = document.getElementById(fieldId + 'Error');
+            
+            if (field && errorDiv) {
+                field.classList.add('error');
+                field.classList.remove('valid');
+                errorDiv.textContent = message;
+            }
+        }
+        
+        // 设置字段有效状态
+        function setFieldValid(fieldId) {
+            const field = document.getElementById(fieldId);
+            const errorDiv = document.getElementById(fieldId + 'Error');
+            
+            if (field && errorDiv) {
+                field.classList.remove('error');
+                field.classList.add('valid');
+                errorDiv.textContent = '';
+            }
+        }
+        
+        // 验证单个字段
+        function validateField(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (!field) return true;
+            
+            const value = field.value.trim();
+            
+            switch (fieldId) {
+                case 'personName':
+                    if (!value) {
+                        setFieldError(fieldId, '请输入姓名');
+                        return false;
+                    } else if (value.length < 2) {
+                        setFieldError(fieldId, '姓名至少需要2个字符');
+                        return false;
+                    } else if (value.length > 50) {
+                        setFieldError(fieldId, '姓名不能超过50个字符');
+                        return false;
+                    } else if (!/^[\u4e00-\u9fa5a-zA-Z\s]+$/.test(value)) {
+                        setFieldError(fieldId, '姓名只能包含中文、英文和空格');
+                        return false;
+                    }
+                    break;
+                    
+                case 'personType':
+                    if (!value) {
+                        setFieldError(fieldId, '请选择人员类型');
+                        return false;
+                    }
+                    break;
+                    
+                case 'phoneNumber':
+                    if (value && !/^1[3-9]\d{9}$/.test(value)) {
+                        setFieldError(fieldId, '请输入正确的11位手机号');
+                        return false;
+                    }
+                    break;
+                    
+                case 'idCardNumber':
+                    if (value) {
+                        if (!/^\d{17}[\dXx]$/.test(value)) {
+                            setFieldError(fieldId, '请输入正确的18位身份证号');
+                            return false;
+                        }
+                        // 身份证校验算法
+                        if (!validateIdCard(value)) {
+                            setFieldError(fieldId, '身份证号码格式不正确');
+                            return false;
+                        }
+                    }
+                    break;
+                    
+                case 'roomId':
+                    if (value && (value.length > 20 || !/^[a-zA-Z0-9\u4e00-\u9fa5-]+$/.test(value))) {
+                        setFieldError(fieldId, '房间号格式不正确（最多20字符，支持中英文数字和连字符）');
+                        return false;
+                    }
+                    break;
+            }
+            
+            setFieldValid(fieldId);
+            return true;
+        }
+        
+        // 身份证号验证
+        function validateIdCard(idCard) {
+            const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+            const checkCodes = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'];
+            
+            let sum = 0;
+            for (let i = 0; i < 17; i++) {
+                sum += parseInt(idCard.charAt(i)) * weights[i];
+            }
+            
+            const checkCode = checkCodes[sum % 11];
+            return idCard.charAt(17).toUpperCase() === checkCode;
+        }
+        
+        // 验证整个表单
+        function validateForm() {
+            const fields = ['personName', 'personType'];
+            let isValid = true;
+            
+            // 验证必填字段
+            fields.forEach(fieldId => {
+                if (!validateField(fieldId)) {
+                    isValid = false;
+                }
+            });
+            
+            // 验证可选字段
+            const optionalFields = ['phoneNumber', 'idCardNumber', 'roomId'];
+            optionalFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field && field.value.trim()) {
+                    if (!validateField(fieldId)) {
+                        isValid = false;
+                    }
+                }
+            });
+            
+            // 检查是否已拍摄并裁剪人脸
+            if (!croppedFaceImageData || detectedFaces.length !== 1) {
+                const messageDiv = document.getElementById('formValidationMessage');
+                if (detectedFaces.length === 0) {
+                    messageDiv.textContent = '请先拍摄人脸图像';
+                } else if (detectedFaces.length > 1) {
+                    messageDiv.textContent = `检测到${detectedFaces.length}张人脸，请确保图片中只有一张人脸`;
+                } else if (!croppedFaceImageData) {
+                    messageDiv.textContent = '人脸裁剪失败，请重新拍摄';
+                } else {
+                    messageDiv.textContent = '请先完成人脸拍摄';
+                }
+                messageDiv.style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('formValidationMessage').style.display = 'none';
+            }
+            
+            return isValid;
+        }
+        
+        // 更新提交按钮状态
+        function updateSubmitButton() {
+            const submitBtn = document.getElementById('submitBtn');
+            const hasValidCapture = croppedFaceImageData && detectedFaces.length === 1;
+            const hasRequiredFields = document.getElementById('personName').value.trim() && 
+                                    document.getElementById('personType').value;
+            const lanDeviceOk = (networkMode !== 'lan') || ((document.getElementById('deviceIdInput')?.value || '').trim().length > 0 || !!deviceId);
+            
+            if (hasValidCapture && hasRequiredFields && lanDeviceOk && !isProcessing) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('btn-disabled');
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('btn-disabled');
+            }
+        }
+        
+        // 计算裁剪区域（统一函数，添加边界检查和优化）
+        function calculateCropRegion(faceBox, imgWidth, imgHeight) {
+            const [x, y, w, h] = faceBox;
+            
+            // 添加边界检查，确保裁剪区域在图像范围内
+            const cropX = Math.max(0, Math.min(Math.round(x), imgWidth - 1));
+            const cropY = Math.max(0, Math.min(Math.round(y), imgHeight - 1));
+            
+            // 确保宽度和高度不超出图像边界
+            const maxWidth = imgWidth - cropX;
+            const maxHeight = imgHeight - cropY;
+            const cropW = Math.min(Math.round(w), maxWidth);
+            const cropH = Math.min(Math.round(h), maxHeight);
+            
+            // 确保至少有最小的有效区域
+            const finalCropW = Math.max(1, cropW);
+            const finalCropH = Math.max(1, cropH);
+            
+            console.log(`裁剪区域计算: 原始(${x},${y},${w},${h}) -> 修正(${cropX},${cropY},${finalCropW},${finalCropH})`);
+            
+            return { 
+                cropX: cropX, 
+                cropY: cropY, 
+                cropW: finalCropW, 
+                cropH: finalCropH 
+            };
+        }
+
+        // 从完整图像中裁剪人脸区域
+        function cropFaceFromImage(imageData, faceBox) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    // 使用naturalWidth和naturalHeight，确保与绿框显示使用相同的坐标系统
+                    const imgWidth = img.naturalWidth || img.width;
+                    const imgHeight = img.naturalHeight || img.height;
+                    const { cropX, cropY, cropW, cropH } = calculateCropRegion(faceBox, imgWidth, imgHeight);
+                    
+                    console.log(`裁剪图像: 图像尺寸=${imgWidth}x${imgHeight}, 裁剪区域=(${cropX},${cropY},${cropW},${cropH})`);
+                    
+                    // 创建canvas进行裁剪
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = cropW;
+                    canvas.height = cropH;
+                    
+                    // 裁剪人脸区域
+                    ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                    
+                    // 转换为Base64
+                    const croppedImageData = canvas.toDataURL('image/jpeg', 0.95);
+                    resolve(croppedImageData);
+                };
+                img.src = imageData;
+            });
+        }
+
+        // 生成客户端ID
+        function generateClientId() {
+            const timestamp = Date.now();
+            const randomSuffix = Math.random().toString(36).substring(2, 8);
+            return `face_reg_client_${timestamp}_${randomSuffix}`;
+        }
+
+        // 清理所有超时定时器
+        function clearAllTimeouts() {
+            if (connectionTimeout) {
+                clearTimeout(connectionTimeout);
+                connectionTimeout = null;
+            }
+            if (videoStreamTimeout) {
+                clearTimeout(videoStreamTimeout);
+                videoStreamTimeout = null;
+            }
+        }
+
+        // 显示重连状态
+        function showReconnectStatus(message, attempt = 0) {
+            const videoContainer = document.getElementById('videoContainer');
+            const reconnectHtml = `
+                <div class="video-placeholder" style="color: #ffc107;">
+                    <div style="font-size: 2em; margin-bottom: 15px;">🔄</div>
+                    <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 10px;">${message}</div>
+                    ${attempt > 0 ? `<div style="font-size: 0.9em; color: #6c757d;">尝试次数: ${attempt}/${maxReconnectAttempts}</div>` : ''}
+                    <div class="loading-spinner" style="margin-top: 15px;"></div>
+                </div>
+            `;
+            videoContainer.innerHTML = reconnectHtml;
+        }
+
+        // 显示连接失败状态
+        function showConnectionFailedStatus(message, canRetry = true) {
+            const videoContainer = document.getElementById('videoContainer');
+            const failedHtml = `
+                <div class="video-placeholder" style="color: #dc3545;">
+                    <div style="font-size: 2em; margin-bottom: 15px;">❌</div>
+                    <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 15px;">${message}</div>
+                    ${canRetry ? `
+                        <button class="btn btn-warning" onclick="manualReconnect()" style="margin-top: 10px;">
+                            🔄 手动重试连接
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+            videoContainer.innerHTML = failedHtml;
+        }
+
+        // 手动重连
+        function manualReconnect() {
+            if (isReconnecting) {
+                log('正在重连中，请稍候...', 'warning');
+                return;
+            }
+            
+            reconnectAttempts = 0;
+            log('用户手动触发重连', 'info');
+            startConnection();
+        }
+
+        // 取消连接
+        function cancelConnection() {
+            log('用户取消连接', 'info');
+            isReconnecting = false;
+            clearAllTimeouts();
+            
+            // 清理连接状态
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            
+            hideLoading('connectBtn', 'connectSpinner');
+            hideCancelButton();
+            hideConnectionHint();
+            
+            // 重置状态指示器
+            updateStatus('authStatus', 'authStatusText', 'info', '已取消');
+            updateStatus('signalingStatus', 'signalingStatusText', 'info', '已取消');
+            updateStatus('cameraStatus', 'cameraStatusText', 'info', '已取消');
+            
+            // 重置视频容器
+            const videoContainer = document.getElementById('videoContainer');
+            videoContainer.innerHTML = `
+                <div class="video-placeholder">
+                    <div style="font-size: 3em; margin-bottom: 20px;">📹</div>
+                    <div>等待连接摄像头...</div>
+                </div>
+            `;
+            
+            updateProgress(1);
+        }
+
+        // 显示/隐藏取消按钮
+        function showCancelButton() {
+            document.getElementById('cancelBtn').classList.remove('hidden');
+        }
+
+        function hideCancelButton() {
+            document.getElementById('cancelBtn').classList.add('hidden');
+        }
+
+        // 显示连接提示
+        function showConnectionHint(message, type = 'warning') {
+            const hintDiv = document.getElementById('connectionHint');
+            const hintText = document.getElementById('connectionHintText');
+            
+            hintDiv.className = `alert alert-${type}`;
+            hintText.innerHTML = message;
+            hintDiv.style.display = 'block';
+        }
+
+        // 隐藏连接提示
+        function hideConnectionHint() {
+            document.getElementById('connectionHint').style.display = 'none';
+        }
+
+        // 处理连接失败
+        function handleConnectionFailure(reason) {
+            clearAllTimeouts();
+            hideLoading('connectBtn', 'connectSpinner');
+            
+            log(`连接失败: ${reason}`, 'error');
+            
+            // 如果还有重连机会，自动重连
+            if (reconnectAttempts < maxReconnectAttempts) {
+                const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 10000); // 指数退避，最大10秒
+                log(`将在 ${delay/1000} 秒后自动重连...`, 'info');
+                
+                // 更新连接提示，显示重连倒计时
+                showConnectionHint(`
+                    <p><strong>⚠️ 连接失败: ${reason}</strong></p>
+                    <p>• 将在 ${delay/1000} 秒后自动重连 (${reconnectAttempts}/${maxReconnectAttempts})</p>
+                    <p>• 可能原因: 网络不稳定、STUN服务器限制、内部机离线</p>
+                    <p>• 您可以点击"取消连接"停止重试</p>
+                `, 'warning');
+                
+                setTimeout(() => {
+                    if (isReconnecting) { // 确保用户没有手动停止重连
+                        startConnection();
+                    }
+                }, delay);
+            } else {
+                // 达到最大重连次数
+                isReconnecting = false;
+                hideCancelButton();
+                showConnectionFailedStatus(`连接失败: ${reason}`, true);
+                updateStatus('cameraStatus', 'cameraStatusText', 'error', '连接失败');
+                
+                // 显示最终失败提示
+                showConnectionHint(`
+                    <p><strong>❌ 连接最终失败</strong></p>
+                    <p>• 已尝试 ${maxReconnectAttempts} 次重连，仍无法建立连接</p>
+                    <p>• 建议检查: 网络连接、内部机状态、服务器配置</p>
+                    <p>• 您可以点击视频区域的"手动重试连接"再次尝试</p>
+                `, 'danger');
+            }
+        }
+
+        // 连接成功处理
+        function handleConnectionSuccess() {
+            clearAllTimeouts();
+            isConnectionEstablished = true;
+            isReconnecting = false;
+            reconnectAttempts = 0;
+            
+            const connectTime = Date.now() - connectionStartTime;
+            log(`✅ 连接建立成功，耗时: ${connectTime}ms`, 'success');
+            hideLoading('connectBtn', 'connectSpinner');
+            hideCancelButton();
+            
+            // 显示成功提示
+            showConnectionHint(`
+                <p><strong>✅ 连接成功！</strong></p>
+                <p>• 摄像头视频流已就绪，可以开始人脸拍摄</p>
+                <p>• 连接耗时: ${connectTime}ms</p>
+            `, 'success');
+            
+            // 3秒后隐藏提示
+            setTimeout(() => {
+                hideConnectionHint();
+            }, 3000);
+        }
+
+        // 日志函数
+        function log(message, level = 'info') {
+            const logArea = document.getElementById('logArea');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${level}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logArea.appendChild(logEntry);
+            logArea.scrollTop = logArea.scrollHeight;
+            
+            console.log(`[${level.toUpperCase()}] ${message}`);
+        }
+
+        // 清空日志
+        function clearLogs() {
+            document.getElementById('logArea').innerHTML = '';
+            log('日志已清空', 'info');
+        }
+
+        // 更新状态指示器
+        function updateStatus(elementId, textElementId, status, text) {
+            const indicator = document.getElementById(elementId);
+            const textElement = document.getElementById(textElementId);
+            
+            indicator.className = `status-indicator status-${status}`;
+            textElement.textContent = text;
+        }
+
+        // 更新进度条
+        function updateProgress(step) {
+            const progress = (step / 5) * 100;
+            document.getElementById('progressFill').style.width = `${progress}%`;
+            
+            // 更新步骤指示器
+            for (let i = 1; i <= 5; i++) {
+                const stepElement = document.getElementById(`step${i}`);
+                stepElement.classList.remove('active', 'completed');
+                
+                if (i < step) {
+                    stepElement.classList.add('completed');
+                } else if (i === step) {
+                    stepElement.classList.add('active');
+                }
+            }
+            
+            currentStep = step;
+        }
+
+        // 显示加载状态
+        function showLoading(buttonId, spinnerId) {
+            const button = document.getElementById(buttonId);
+            const spinner = document.getElementById(spinnerId);
+            if (button && spinner) {
+                button.disabled = true;
+                spinner.classList.remove('hidden');
+            }
+        }
+
+        // 隐藏加载状态
+        function hideLoading(buttonId, spinnerId) {
+            const button = document.getElementById(buttonId);
+            const spinner = document.getElementById(spinnerId);
+            if (button && spinner) {
+                button.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        // WebRTC API 客户端类
+        class WebRTCAPIClient {
+            constructor(dataChannel) {
+                this.dataChannel = dataChannel;
+                this.requestId = 0;
+                this.pendingRequests = new Map();
+                
+                this.dataChannel.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        // 检查是否为分片消息
+                        if (webrtcChunker && data.type === 'chunk') {
+                            
+                            // 特殊处理：如果是ACK消息，调用processAck更新流控制状态
+                            if (data.chunk_type === 'ack') {
+                                console.debug(`Received ACK from server: ${data.message_id}, chunk ${data.chunk_index}`);
+                                webrtcChunker.processAck(data, 'client'); // 使用'client'而不是'server'
+                                return; // ACK处理完成，不需要发送响应
+                            }
+                            
+                            // 其他分片消息使用processChunk处理（客户端作为接收方）
+                            const result = webrtcChunker.processChunk(data, 'server');
+                            
+                            if (result) {
+                                if (result.completeMessage) {
+                                    // 处理完整的分片消息
+                                    this.handleResponse(result.completeMessage);
+                                    
+                                    // 发送完成确认
+                                    if (result.ackChunk) {
+                                        this.dataChannel.send(JSON.stringify(result.ackChunk));
+                                    }
+                                } else if (result.type === 'chunk' && result.chunk_type === 'ack') {
+                                    // 发送ACK响应
+                                    this.dataChannel.send(JSON.stringify(result));
+                                } else if (result.type === 'chunk' && result.chunk_type === 'error') {
+                                    // 处理错误响应
+                                    log(`分片传输错误: ${result.data}`, 'error');
+                                } else {
+                                    // 发送其他类型的确认
+                                    this.dataChannel.send(JSON.stringify(result));
+                                }
+                            }
+                        } else {
+                            // 处理普通消息
+                            this.handleResponse(data);
+                        }
+                        
+                    } catch (error) {
+                        console.error('Failed to parse data channel response:', error);
+                        log(`数据通道响应解析失败: ${error.message}`, 'error');
+                    }
+                };
+                
+                // 监听数据通道错误
+                this.dataChannel.onerror = (error) => {
+                    console.error('Data channel error:', error);
+                    log(`数据通道错误: ${error.toString()}`, 'error');
+                    // 清理所有待处理请求
+                    for (const [requestId, { reject }] of this.pendingRequests) {
+                        reject(new Error('Data channel error: ' + error.toString()));
+                    }
+                    this.pendingRequests.clear();
+                };
+            }
+            
+            async request(method, endpoint, data = null, headers = {}) {
+                return new Promise((resolve, reject) => {
+                    if (this.dataChannel.readyState !== 'open') {
+                        reject(new Error('Data channel not open'));
+                        return;
+                    }
+                    
+                    const requestId = ++this.requestId;
+                    const request = {
+                        id: requestId,
+                        method: method.toUpperCase(),
+                        endpoint: endpoint,
+                        data: data,
+                        headers: headers
+                    };
+                    
+                    // 存储请求回调
+                    this.pendingRequests.set(requestId, { resolve, reject });
+                    
+                    // 发送请求
+                    console.log('Sending API request:', request);
+                    log(`发送API请求: ${method} ${endpoint} (ID: ${requestId})`, 'info');
+                    
+                    // 检查数据大小，决定是否使用分片
+                    const requestJson = JSON.stringify(request);
+                    const requestSize = new TextEncoder().encode(requestJson).length;
+                    
+                    if (requestSize > 16000 && webrtcChunker) { // 16KB以上使用分片
+                        log(`数据较大(${Math.round(requestSize/1024)}KB)，使用分片传输`, 'info');
+                        this.sendChunkedRequest(request, resolve, reject);
+                    } else {
+                        // 小数据直接发送
+                        this.dataChannel.send(requestJson);
+                        
+                        // 设置超时
+                        setTimeout(() => {
+                            if (this.pendingRequests.has(requestId)) {
+                                this.pendingRequests.delete(requestId);
+                                reject(new Error('Request timeout'));
+                            }
+                        }, 30000); // 30秒超时
+                    }
+                });
+            }
+            
+            sendChunkedRequest(request, resolve, reject) {
+                try {
+                    if (!webrtcChunker) {
+                        reject(new Error('WebRTC chunker not available'));
+                        return;
+                    }
+                    
+                    // 使用分片处理器分片并发送
+                    const chunks = webrtcChunker.chunkMessage(request, 'client', 2);
+                    
+                    if (chunks.length === 0) {
+                        this.pendingRequests.delete(request.id);
+                        reject(new Error('Request queued due to transfer limits'));
+                        return;
+                    }
+                    
+                    if (chunks.length === 1) {
+                        // 实际上不需要分片，直接发送
+                        this.dataChannel.send(JSON.stringify(chunks[0]));
+                    } else {
+                        // 需要分片，逐个发送
+                        log(`发送 ${chunks.length} 个分片`, 'info');
+                        this.sendChunks(chunks, request.id);
+                    }
+                    
+                    // 设置超时
+                    setTimeout(() => {
+                        if (this.pendingRequests.has(request.id)) {
+                            this.pendingRequests.delete(request.id);
+                            reject(new Error('Chunked request timeout'));
+                        }
+                    }, 60000); // 分片传输60秒超时
+                    
+                } catch (error) {
+                    if (this.pendingRequests.has(request.id)) {
+                        this.pendingRequests.delete(request.id);
+                    }
+                    reject(error);
+                }
+            }
+            
+            async sendChunks(chunks, requestId) {
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunk = chunks[i];
+                    try {
+                        this.dataChannel.send(JSON.stringify(chunk));
+                        console.log(`Sent chunk ${i+1}/${chunks.length} for request ${requestId}`);
+                        
+                        // 添加小延迟避免发送过快
+                        if (i < chunks.length - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 10));
+                        }
+                    } catch (error) {
+                        log(`发送分片 ${i+1} 失败: ${error.message}`, 'error');
+                        if (this.pendingRequests.has(requestId)) {
+                            const { reject } = this.pendingRequests.get(requestId);
+                            this.pendingRequests.delete(requestId);
+                            reject(new Error(`Failed to send chunk ${i+1}: ${error.message}`));
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            handleResponse(response) {
+                console.log('Received API response:', response);
+                log(`收到API响应: ID=${response.id}, 成功=${response.success}`, 'info');
+                
+                const requestId = response.id;
+                
+                // 首先尝试精确匹配
+                if (this.pendingRequests.has(requestId)) {
+                    const { resolve, reject } = this.pendingRequests.get(requestId);
+                    this.pendingRequests.delete(requestId);
+                    
+                    // 检查响应是否表示成功
+                    if (response.success) {
+                        resolve(response);
+                    } else {
+                        // 如果响应包含错误信息，创建一个错误对象
+                        const error = new Error(response.error || response.detail || '请求失败');
+                        error.response = response;  // 保存完整的响应信息
+                        reject(error);
+                    }
+                    return;
+                }
+                
+                // 如果精确匹配失败，尝试基于时间戳的模糊匹配（适用于分片请求）
+                const responseTime = parseInt(requestId);
+                if (!isNaN(responseTime)) {
+                    let closestRequestId = null;
+                    let minTimeDiff = Infinity;
+                    
+                    for (const [pendingId] of this.pendingRequests) {
+                        const requestTime = parseInt(pendingId);
+                        if (!isNaN(requestTime)) {
+                            const timeDiff = Math.abs(responseTime - requestTime);
+                            if (timeDiff < minTimeDiff && timeDiff < 120000) { // 2分钟内的请求
+                                minTimeDiff = timeDiff;
+                                closestRequestId = pendingId;
+                            }
+                        }
+                    }
+                    
+                    if (closestRequestId && minTimeDiff < 60000) { // 1分钟内认为是匹配的
+                        log(`通过时间匹配找到请求: ${closestRequestId} -> ${requestId} (时差: ${minTimeDiff}ms)`, 'info');
+                        const { resolve, reject } = this.pendingRequests.get(closestRequestId);
+                        this.pendingRequests.delete(closestRequestId);
+                        
+                        // 检查响应是否表示成功
+                        if (response.success) {
+                            resolve(response);
+                        } else {
+                            // 如果响应包含错误信息，创建一个错误对象
+                            const error = new Error(response.error || response.detail || '请求失败');
+                            error.response = response;  // 保存完整的响应信息
+                            reject(error);
+                        }
+                        return;
+                    }
+                }
+                
+                log(`未找到对应的请求ID: ${requestId}`, 'warning');
+                log(`当前待处理请求: [${Array.from(this.pendingRequests.keys()).join(', ')}]`, 'info');
+            }
+            
+            async get(endpoint, headers = {}) {
+                return this.request('GET', endpoint, null, headers);
+            }
+            
+            async post(endpoint, data, headers = {}) {
+                return this.request('POST', endpoint, data, headers);
+            }
+        }
+
+        // 开始连接流程
+        async function startConnection() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                log('请输入API Key', 'error');
+                return;
+            }
+
+            // 先探测网络环境，优先直连
+            try {
+                networkMode = await detectNetworkEnvironment();
+            } catch (e) {
+                networkMode = 'remote';
+            }
+
+            if (networkMode === 'lan') {
+                // 局域网直连模式：不使用WebRTC/信令，直接HTTP调用WebAPI
+                const internalIp = (document.getElementById('internalIp')?.value || '').trim();
+                const baseLanUrl = `http://${internalIp}:5001`;
+                apiClient = new HttpAPIClient(baseLanUrl);
+
+                updateStatus('authStatus', 'authStatusText', 'success', '直连就绪');
+                updateStatus('signalingStatus', 'signalingStatusText', 'success', '直连，无需信令');
+                updateStatus('cameraStatus', 'cameraStatusText', 'info', '直连模式：可启用本机摄像头或上传');
+                showConnectionHint(`
+                    <p><strong>✅ 已启用局域网直连模式</strong></p>
+                    <p>• 将直接调用内部机WebAPI，不经过WebRTC</p>
+                    <p>• 您可以启用本机摄像头进行拍摄，或直接上传头像图片进行录入</p>
+                `, 'success');
+
+                log('✅ 局域网直连模式已启用', 'success');
+                updateProgress(3);
+
+                // 加载人员类型（不阻塞）
+                try { await loadProfileTypes(); } catch (e) {}
+
+                // 显示设备ID输入
+                const deviceIdGroup = document.getElementById('deviceIdGroup');
+                if (deviceIdGroup) deviceIdGroup.classList.remove('hidden');
+                // 记录LAN基础URL并加载LAN摄像头
+                lanBaseUrl = baseLanUrl;
+                await loadLanManualCameras();
+                return; // 不再走远程WebRTC流程
+            }
+
+            // 如果正在重连，则增加重连次数，否则重置
+            if (!isReconnecting) {
+                reconnectAttempts = 0;
+                isReconnecting = true;
+            } else {
+                reconnectAttempts++;
+            }
+
+            // 检查是否超过最大重连次数
+            if (reconnectAttempts > maxReconnectAttempts) {
+                log(`已达到最大重连次数(${maxReconnectAttempts})，停止重连`, 'error');
+                isReconnecting = false;
+                showConnectionFailedStatus('连接失败，已达到最大重连次数', true);
+                hideLoading('connectBtn', 'connectSpinner');
+                return;
+            }
+
+            // 显示连接状态
+            if (reconnectAttempts > 0) {
+                log(`第 ${reconnectAttempts} 次重连尝试...`, 'warning');
+                showReconnectStatus('正在重新连接...', reconnectAttempts);
+            } else {
+                log('开始建立连接...', 'info');
+            }
+
+            // 每次连接都重新生成客户端ID
+            clientID = generateClientId();
+            log(`生成新的客户端ID: ${clientID}`, 'info');
+            document.getElementById('clientId').value = clientID;
+            
+            // 清理之前的连接状态
+            clearAllTimeouts();
+            isConnectionEstablished = false;
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+            
+            if (webrtcChunker) {
+                webrtcChunker.stop();
+                webrtcChunker = null;
+            }
+            
+            // 关闭旧的WebSocket连接
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
+            // 设置总连接超时（10秒）
+            connectionStartTime = Date.now();
+            connectionTimeout = setTimeout(() => {
+                if (!isConnectionEstablished) {
+                    log('连接超时，开始重连...', 'warning');
+                    handleConnectionFailure('连接超时');
+                }
+            }, 10000);
+
+            showLoading('connectBtn', 'connectSpinner');
+            showCancelButton();
+            
+            // 显示连接提示
+            if (reconnectAttempts === 0) {
+                showConnectionHint(`
+                    <p><strong>正在建立连接...</strong></p>
+                    <p>• 如果长时间无响应，可能是网络问题或内部机离线</p>
+                    <p>• 系统将自动重试最多 ${maxReconnectAttempts} 次</p>
+                    <p>• 您也可以点击"取消连接"停止尝试</p>
+                `, 'info');
+            } else {
+                showConnectionHint(`
+                    <p><strong>第 ${reconnectAttempts} 次重连中...</strong></p>
+                    <p>• 由于网络问题或STUN/TURN服务器限制，连接可能需要多次尝试</p>
+                    <p>• 系统将继续重试，请耐心等待</p>
+                `, 'warning');
+            }
+            
+            try {
+                // 步骤1: API认证
+                await authenticateAPI();
+                
+                // 步骤2: 连接信令服务器
+                await connectSignalingServer();
+                
+                // 设置视频流超时（额外5秒等待视频流）
+                videoStreamTimeout = setTimeout(() => {
+                    if (!document.querySelector('video') || document.querySelector('video').videoWidth === 0) {
+                        log('视频流超时，开始重连...', 'warning');
+                        handleConnectionFailure('视频流获取超时');
+                    }
+                }, 15000);
+                
+            } catch (error) {
+                log(`连接失败: ${error.message}`, 'error');
+                handleConnectionFailure(error.message);
+            }
+        }
+
+        // 步骤1: API认证
+        async function authenticateAPI() {
+            const apiKey = document.getElementById('apiKey').value;
+            const authUrl = document.getElementById('authUrl').value;
+            
+            updateStatus('authStatus', 'authStatusText', 'warning', '认证中...');
+            
+            try {
+                log('开始API Key认证...', 'info');
+                
+                const response = await fetch(`${authUrl}/api-auth`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        api_key: apiKey
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    authToken = data.token;
+                    updateStatus('authStatus', 'authStatusText', 'success', '认证成功');
+                    log('✅ API Key认证成功', 'success');
+                    log(`租户ID: ${data.tenant_id?.substring(0, 10)}...`, 'success');
+                    updateProgress(1);
+                } else {
+                    throw new Error(data.error || '认证失败');
+                }
+            } catch (error) {
+                updateStatus('authStatus', 'authStatusText', 'error', '认证失败');
+                throw error;
+            }
+        }
+
+        // 步骤2: 连接信令服务器
+        async function connectSignalingServer() {
+            if (!authToken) {
+                throw new Error('请先完成API Key认证');
+            }
+
+            let signalingUrl = document.getElementById('signalingUrl').value;
+            
+            updateStatus('signalingStatus', 'signalingStatusText', 'warning', '连接中...');
+
+            if (!signalingUrl.includes('/ws')) {
+                if (signalingUrl.endsWith('/')) {
+                    signalingUrl += 'ws';
+                } else {
+                    signalingUrl += '/ws';
+                }
+            }
+
+            log('开始信令服务器连接...', 'info');
+
+            return new Promise((resolve, reject) => {
+                try {
+                    ws = new WebSocket(signalingUrl);
+                    
+                    ws.onopen = function() {
+                        log('✅ WebSocket连接建立成功', 'success');
+                        updateStatus('signalingStatus', 'signalingStatusText', 'success', '连接成功');
+                        
+                        const registerMsg = {
+                            type: 'register',
+                            token: authToken,
+                            id: clientID
+                        };
+                        ws.send(JSON.stringify(registerMsg));
+                        log('已发送客户端注册消息', 'info');
+                    };
+
+                    ws.onmessage = function(event) {
+                        const message = JSON.parse(event.data);
+                        handleSignalingMessage(message, resolve, reject);
+                    };
+
+                    ws.onclose = function() {
+                        log('⚠️ WebSocket连接关闭', 'warning');
+                        if (document.getElementById('signalingStatusText').textContent !== '连接成功') {
+                            updateStatus('signalingStatus', 'signalingStatusText', 'error', '连接断开');
+                        }
+                    };
+
+                    ws.onerror = function(error) {
+                        log(`❌ WebSocket连接错误`, 'error');
+                        updateStatus('signalingStatus', 'signalingStatusText', 'error', '连接失败');
+                        reject(new Error('WebSocket连接失败'));
+                    };
+
+                } catch (error) {
+                    log(`❌ 创建WebSocket连接失败: ${error.message}`, 'error');
+                    updateStatus('signalingStatus', 'signalingStatusText', 'error', '连接失败');
+                    reject(error);
+                }
+            });
+        }
+
+        // 处理信令消息
+        function handleSignalingMessage(message, resolve, reject) {
+            log(`收到信令消息: ${message.type}`, 'info');
+
+            switch (message.type) {
+                case 'registered':
+                    log('✅ 客户端注册成功', 'success');
+                    // 自动查询摄像头
+                    setTimeout(() => {
+                        queryCameras(resolve, reject);
+                    }, 500);
+                    break;
+                case 'clients_list':
+                    handleClientsList(message.clients, resolve, reject);
+                    break;
+                case 'answer':
+                    handleAnswer(message);
+                    break;
+                case 'ice-candidate':
+                    handleIceCandidate(message);
+                    break;
+                case 'error':
+                    log(`❌ 信令错误: ${message.message}`, 'error');
+                    if (reject) reject(new Error(message.message));
+                    break;
+                default:
+                    log(`未知消息类型: ${message.type}`, 'warning');
+            }
+        }
+
+        // 查询摄像头
+        function queryCameras(resolve, reject) {
+            updateStatus('cameraStatus', 'cameraStatusText', 'warning', '查询中...');
+            log('正在查询“手动录入”摄像头...', 'info');
+            
+            ws.send(JSON.stringify({
+                type: 'query_clients',
+                source: clientID
+            }));
+            
+            // 如果超时未找到摄像头，触发连接失败处理
+            setTimeout(() => {
+                if (!selectedClient && !isConnectionEstablished && manualCameras.length === 0) {
+                    updateStatus('cameraStatus', 'cameraStatusText', 'error', '未发现手动录入摄像头');
+                    handleConnectionFailure('未发现可用的手动录入摄像头');
+                }
+            }, 8000);
+        }
+
+        // 处理客户端列表
+        function handleClientsList(clientsList, resolve, reject) {
+            log(`发现 ${clientsList.length} 个内部机`, 'success');
+
+            if (clientsList.length === 0) {
+                updateStatus('cameraStatus', 'cameraStatusText', 'error', '未发现摄像头');
+                if (reject) reject(new Error('未发现任何内部机'));
+                return;
+            }
+
+            // 收集所有手动录入摄像头（func_type==2）
+            manualCameras = [];
+            for (const client of clientsList) {
+                const manual = (client.cameras || []).filter(camera => camera.func_type === 2);
+                for (const cam of manual) {
+                    manualCameras.push({
+                        clientId: client.id,
+                        camera: cam
+                    });
+                }
+            }
+
+            if (manualCameras.length === 0) {
+                updateStatus('cameraStatus', 'cameraStatusText', 'error', '未发现手动录入型摄像头');
+                if (reject) reject(new Error('未找到func_type==2的摄像头'));
+                return;
+            }
+
+            if (manualCameras.length === 1) {
+                // 只有一个手动录入摄像头，直接连接
+                const found = manualCameras[0];
+                selectedClient = found.clientId;
+                selectedCamera = found.camera.index;
+                selectedCameraType = found.camera.type || 'local';
+                deviceId = found.camera.device_id;
+
+                updateStatus('cameraStatus', 'cameraStatusText', 'success', '摄像头已连接');
+                const deviceInfo = document.getElementById('deviceInfo');
+                const deviceDetails = document.getElementById('deviceDetails');
+                deviceInfo.classList.remove('hidden');
+                deviceDetails.innerHTML = `
+                    <p><strong>内部机:</strong> ${found.clientId}</p>
+                    <p><strong>摄像头:</strong> ${found.camera.name}</p>
+                    <p><strong>分辨率:</strong> ${found.camera.resolution} @ ${found.camera.fps}fps</p>
+                    <p><strong>类型:</strong> ${found.camera.type}</p>
+                `;
+
+                const locationInput = document.getElementById('location');
+                if (found.camera.location) {
+                    locationInput.value = found.camera.location;
+                    log(`设置录入位置为: ${found.camera.location}`, 'info');
+                } else {
+                    locationInput.value = found.camera.name;
+                    log(`摄像头未提供位置信息，使用摄像头名称作为录入位置: ${found.camera.name}`, 'warning');
+                }
+
+                log(`✅ 已选择摄像头: ${found.camera.name}`, 'success');
+
+                establishWebRTCConnection(found.clientId, found.camera.index)
+                    .then(() => {
+                        updateProgress(2);
+                        if (resolve) resolve();
+                    })
+                    .catch(error => {
+                        log(`WebRTC连接失败: ${error.message}`, 'error');
+                        handleConnectionFailure(`WebRTC连接失败: ${error.message}`);
+                        if (reject) reject(error);
+                    });
+                return;
+            }
+
+            // 多个手动录入摄像头：显示选择UI
+            updateStatus('cameraStatus', 'cameraStatusText', 'info', `发现 ${manualCameras.length} 个手动录入摄像头，请选择`);
+            const container = document.getElementById('manualCameraSelection');
+            const selectEl = document.getElementById('cameraSelect');
+            const btn = document.getElementById('connectCameraBtn');
+            if (container && selectEl && btn) {
+                container.classList.remove('hidden');
+                // 填充选项
+                selectEl.innerHTML = '';
+                manualCameras.forEach((entry, idx) => {
+                    const cam = entry.camera;
+                    const opt = document.createElement('option');
+                    opt.value = String(idx);
+                    opt.textContent = `${cam.name} (${cam.type}) ${cam.resolution} @ ${cam.fps}fps`;
+                    selectEl.appendChild(opt);
+                });
+                btn.disabled = false;
+            }
+
+            // 缓存resolve/reject，待用户选择后再触发连接
+            pendingConnectResolve = resolve;
+            pendingConnectReject = reject;
+        }
+
+        // 连接所选“手动录入”摄像头
+        function connectSelectedCamera() {
+            try {
+                const selectEl = document.getElementById('cameraSelect');
+                if (!selectEl || manualCameras.length === 0) {
+                    log('未找到可用的手动录入摄像头', 'error');
+                    if (pendingConnectReject) pendingConnectReject(new Error('未找到可用的手动录入摄像头'));
+                    return;
+                }
+
+                const idx = parseInt(selectEl.value);
+                if (isNaN(idx) || idx < 0 || idx >= manualCameras.length) {
+                    log('请选择一个有效的摄像头', 'warning');
+                    return;
+                }
+
+                const entry = manualCameras[idx];
+                selectedClient = entry.clientId;
+                selectedCamera = entry.camera.index;
+                selectedCameraType = entry.camera.type || 'local';
+                deviceId = entry.camera.device_id;
+
+                // 隐藏选择区
+                const container = document.getElementById('manualCameraSelection');
+                if (container) container.classList.add('hidden');
+
+                // 显示设备信息
+                const deviceInfo = document.getElementById('deviceInfo');
+                const deviceDetails = document.getElementById('deviceDetails');
+                deviceInfo.classList.remove('hidden');
+                deviceDetails.innerHTML = `
+                    <p><strong>内部机:</strong> ${entry.clientId}</p>
+                    <p><strong>摄像头:</strong> ${entry.camera.name}</p>
+                    <p><strong>分辨率:</strong> ${entry.camera.resolution} @ ${entry.camera.fps}fps</p>
+                    <p><strong>类型:</strong> ${entry.camera.type}</p>
+                `;
+
+                const locationInput = document.getElementById('location');
+                if (entry.camera.location) {
+                    locationInput.value = entry.camera.location;
+                } else {
+                    locationInput.value = entry.camera.name;
+                }
+
+                updateStatus('cameraStatus', 'cameraStatusText', 'success', '摄像头已选择，开始连接');
+                log(`✅ 已选择摄像头: ${entry.camera.name}`, 'success');
+
+                establishWebRTCConnection(entry.clientId, entry.camera.index)
+                    .then(() => {
+                        updateProgress(2);
+                        if (pendingConnectResolve) pendingConnectResolve();
+                        pendingConnectResolve = null;
+                        pendingConnectReject = null;
+                    })
+                    .catch(error => {
+                        log(`WebRTC连接失败: ${error.message}`, 'error');
+                        handleConnectionFailure(`WebRTC连接失败: ${error.message}`);
+                        if (pendingConnectReject) pendingConnectReject(error);
+                        pendingConnectResolve = null;
+                        pendingConnectReject = null;
+                    });
+            } catch (e) {
+                log(`选择摄像头时出错: ${e.message}`, 'error');
+                if (pendingConnectReject) pendingConnectReject(e);
+                pendingConnectResolve = null;
+                pendingConnectReject = null;
+            }
+        }
+        
+
+        // 建立WebRTC连接
+        async function establishWebRTCConnection(targetClientId, cameraIndex) {
+            // ICE候选发送状态跟踪
+            let hasSentValidCandidate = false;
+            
+            try {
+                // 只有在存在旧连接时才清理状态
+                if (peerConnection && peerConnection.connectionState !== 'new') {
+                    log('清理之前的WebRTC连接...', 'info');
+                    peerConnection.close();
+                    peerConnection = null;
+                }
+                
+                if (dataChannel && dataChannel.readyState === 'open') {
+                    dataChannel.close();
+                    dataChannel = null;
+                }
+                
+                if (webrtcChunker) {
+                    webrtcChunker.stop();
+                    webrtcChunker = null;
+                }
+
+                log(`正在与 ${targetClientId} 建立WebRTC连接...`, 'info');
+
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // 添加详细的ICE状态监听
+                peerConnection.oniceconnectionstatechange = () => {
+                    const state = peerConnection.iceConnectionState;
+                    log(`ICE连接状态: ${state}`, 'info');
+                    
+                    switch(state) {
+                        case 'checking':
+                            log('正在检查ICE连接...', 'info');
+                            break;
+                        case 'connected':
+                            log('ICE连接已建立！', 'success');
+                            handleConnectionSuccess();
+                            break;
+                        case 'completed':
+                            log('ICE连接完成', 'success');
+                            handleConnectionSuccess();
+                            break;
+                        case 'failed':
+                            log('ICE连接失败 - 可能是网络或防火墙问题', 'error');
+                            handleConnectionFailure('ICE连接失败');
+                            break;
+                        case 'disconnected':
+                            log('ICE连接断开', 'warning');
+                            if (isConnectionEstablished) {
+                                log('连接意外断开，尝试重连...', 'warning');
+                                handleConnectionFailure('连接意外断开');
+                            }
+                            break;
+                        case 'closed':
+                            log('ICE连接已关闭', 'info');
+                            break;
+                    }
+                };
+                
+                peerConnection.onicegatheringstatechange = () => {
+                    const state = peerConnection.iceGatheringState;
+                    log(`ICE收集状态: ${state}`, 'info');
+                };
+                
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        log(`生成ICE候选: ${event.candidate.candidate.substring(0, 50)}...`, 'info');
+                    } else {
+                        log('ICE候选收集完成', 'info');
+                    }
+                };
+                
+                // 添加视频收发器
+                peerConnection.addTransceiver('video', { direction: 'recvonly' });
+                
+                // 创建数据通道
+                dataChannel = peerConnection.createDataChannel('api', {
+                    ordered: true
+                });
+                
+                dataChannel.onopen = function() {
+                    log('✅ 数据通道已打开', 'success');
+                    
+                    // 初始化分片处理器
+                    webrtcChunker = new WebRTCChunker(8000, 30000, 3);
+                    
+                    webrtcChunker.onMessageComplete = (clientId, message, messageId) => {
+                        log(`✅ 分片消息组装完成: ${messageId}`, 'success');
+                    };
+                    
+                    webrtcChunker.onTransferProgress = (clientId, messageId, progress) => {
+                        log(`传输进度: ${Math.round(progress * 100)}% (消息ID: ${messageId})`, 'info');
+                    };
+                    
+                    webrtcChunker.onError = (clientId, error) => {
+                        log(`❌ 分片传输错误: ${error}`, 'error');
+                    };
+                    
+                    // 初始化API客户端
+                    apiClient = new WebRTCAPIClient(dataChannel);
+                    log('WebRTC API客户端已初始化', 'success');
+                    
+                    // 异步加载人员类型，不阻塞数据通道初始化
+                    setTimeout(async () => {
+                        await loadProfileTypes();
+                    }, 100);
+                };
+                
+                dataChannel.onclose = function() {
+                    log('⚠️ 数据通道已关闭', 'warning');
+                    apiClient = null;
+                    webrtcChunker = null;
+                };
+
+                // 设置视频流接收
+                peerConnection.ontrack = function(event) {
+                    log('✅ 收到视频流', 'success');
+                    
+                    let video = document.getElementById('videoContainer').querySelector('video');
+                    if (!video) {
+                        video = document.createElement('video');
+                        video.autoplay = true;
+                        video.controls = false;
+                        video.muted = true;
+                        video.style.width = '100%';
+                        video.style.height = '100%';
+                        video.style.objectFit = 'contain';
+                        document.getElementById('videoContainer').innerHTML = '';
+                        document.getElementById('videoContainer').appendChild(video);
+                        
+                        // 监听视频开始播放
+                        video.onloadedmetadata = function() {
+                            log(`✅ 视频流开始播放，分辨率: ${video.videoWidth}x${video.videoHeight}`, 'success');
+                            clearTimeout(videoStreamTimeout); // 清除视频流超时
+                            handleConnectionSuccess();
+                        };
+                    }
+                    video.srcObject = event.streams[0];
+                    
+                    // 启用拍摄按钮
+                    document.getElementById('captureBtn').disabled = false;
+                    updateProgress(3);
+                    updateSubmitButton();
+                };
+
+                peerConnection.onicecandidate = function(event) {
+                    if (event.candidate) {
+                        const candidateStr = event.candidate.candidate;
+                        log(`生成ICE候选: ${candidateStr.substring(0, 100)}...`, 'info');
+                        
+                        // 分析候选类型
+                        if (candidateStr.includes('typ host')) {
+                            log('→ 主机候选 (直连)', 'info');
+                        } else if (candidateStr.includes('typ srflx')) {
+                            log('→ 服务器反射候选 (STUN)', 'info');
+                        } else if (candidateStr.includes('typ relay')) {
+                            log('→ 中继候选 (TURN)', 'info');
+                        } else if (candidateStr.includes('typ prflx')) {
+                            log('→ 对等反射候选', 'info');
+                        }
+                        
+                        // 过滤mDNS候选(.local地址)以避免服务器解析问题
+                        // 但是当没有其他候选时，允许TURN/STUN候选通过
+                        if (candidateStr.includes('.local') && !candidateStr.includes('typ relay') && !candidateStr.includes('typ srflx')) {
+                            log(`跳过mDNS候选: ${candidateStr.substring(0, 50)}...`, 'warning');
+                            // 不直接return，继续检查是否有TURN/STUN候选
+                            // 如果这是唯一候选且超时未收到其他候选，将发送
+                            setTimeout(() => {
+                                if (!hasSentValidCandidate) {
+                                    log('未找到有效候选，发送mDNS候选作为备选', 'warning');
+                                    const iceMessage = {
+                                        'type': 'ice-candidate',
+                                        'data': {
+                                            'candidate': event.candidate.candidate,
+                                            'sdpMid': event.candidate.sdpMid,
+                                            'sdpMLineIndex': event.candidate.sdpMLineIndex
+                                        },
+                                        'target': targetClientId,
+                                        'source': clientID
+                                    };
+                                    
+                                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                                        websocket.send(JSON.stringify(iceMessage));
+                                        log('mDNS候选已发送', 'info');
+                                    }
+                                }
+                            }, 3000); // 3秒后如果没有其他候选就发送mDNS
+                            return;
+                        }
+                        
+                        // 标记已发送有效候选
+                        hasSentValidCandidate = true;
+                        
+                        const iceMessage = {
+                            'type': 'ice-candidate',
+                            'data': {
+                                'candidate': event.candidate.candidate,
+                                'sdpMid': event.candidate.sdpMid,
+                                'sdpMLineIndex': event.candidate.sdpMLineIndex
+                            },
+                            'target': targetClientId,
+                            'source': clientID
+                        };
+                        ws.send(JSON.stringify(iceMessage));
+                        log(`✅ 发送ICE候选到服务器: ${candidateStr.substring(0, 50)}...`, 'success');
+                    } else {
+                        log('ICE候选收集完成', 'info');
+                    }
+                };
+
+                peerConnection.onconnectionstatechange = function() {
+                    log(`连接状态变化: ${peerConnection.connectionState}`, 'info');
+                };
+
+                // 创建并发送offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                const offerMessage = {
+                    'type': 'offer',
+                    'data': {
+                        'sdp': peerConnection.localDescription.sdp,
+                        'type': peerConnection.localDescription.type
+                    },
+                    'target': targetClientId,
+                    'source': clientID,
+                    'camera_index': parseInt(cameraIndex),
+                    'camera_type': (selectedCameraType || 'local')
+                };
+                ws.send(JSON.stringify(offerMessage));
+                log('已发送offer消息', 'info');
+
+            } catch (error) {
+                log(`❌ 建立WebRTC连接失败: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // 处理answer
+        async function handleAnswer(message) {
+            try {
+                if (peerConnection && message.data) {
+                    const answer = new RTCSessionDescription({
+                        sdp: message.data.sdp,
+                        type: message.data.type
+                    });
+                    await peerConnection.setRemoteDescription(answer);
+                    log('✅ 远程描述设置成功', 'success');
+                }
+            } catch (error) {
+                log(`❌ 处理answer失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 处理ICE候选
+        async function handleIceCandidate(message) {
+            try {
+                if (peerConnection && message.data) {
+                    const candidate = new RTCIceCandidate({
+                        candidate: message.data.candidate,
+                        sdpMid: message.data.sdpMid,
+                        sdpMLineIndex: message.data.sdpMLineIndex
+                    });
+                    await peerConnection.addIceCandidate(candidate);
+                    log('✅ ICE候选添加成功', 'info');
+                }
+            } catch (error) {
+                log(`⚠️ 处理ICE候选失败: ${error.message}`, 'warning');
+            }
+        }
+
+        // 加载人员类型
+        async function loadProfileTypes() {
+            if (!apiClient) {
+                log('API客户端未初始化', 'error');
+                return;
+            }
+
+            if (isProcessing) {
+                log('系统正在处理其他请求，请稍后重试', 'warning');
+                return;
+            }
+
+            try {
+                isProcessing = true;  // 设置处理状态
+                log('正在获取人员类型列表...', 'info');
+                const response = await apiClient.get('/api/profile/types');
+                
+                if (response.success) {
+                    profileTypes = response.types;
+                    profileTypesLoaded = true;  // 标记加载完成
+                    log(`✅ 成功获取 ${profileTypes.length} 个人员类型`, 'success');
+                    
+                    // 更新下拉框
+                    const personTypeSelect = document.getElementById('personType');
+                    personTypeSelect.innerHTML = '<option value="">请选择人员类型</option>';
+                    
+                    profileTypes.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type.id;
+                        option.textContent = `${type.type_name} (${type.description})`;
+                        personTypeSelect.appendChild(option);
+                    });
+                } else {
+                    throw new Error(response.error || '获取人员类型失败');
+                }
+            } catch (error) {
+                log(`❌ 获取人员类型失败: ${error.message}`, 'error');
+            } finally {
+                isProcessing = false;  // 清除处理状态
+            }
+        }
+
+        // 拍摄图像
+        async function captureImage() {
+            // 在直连模式下，若无WebRTC视频，则从快照接口抓取
+            if (networkMode === 'lan' && !document.querySelector('video')) {
+                return await captureImageLan();
+            }
+
+            const video = document.querySelector('video');
+            if (!video || video.videoWidth === 0) {
+                log('视频流未准备就绪', 'error');
+                return;
+            }
+
+            // 检查人员类型是否已加载
+            if (!profileTypesLoaded) {
+                log('人员类型数据尚未加载完成，请等待', 'warning');
+                // 尝试重新加载人员类型
+                if (!isProcessing) {
+                    await loadProfileTypes();
+                }
+                if (!profileTypesLoaded) {
+                    log('人员类型数据加载失败，无法进行人脸录入', 'error');
+                    return;
+                }
+            }
+
+            // 检查是否正在处理其他请求
+            if (isProcessing) {
+                log('系统正在处理其他请求，请稍后重试', 'warning');
+                return;
+            }
+
+            try {
+                isProcessing = true;  // 设置处理状态
+                log('开始拍摄图像...', 'info');
+
+                // 创建canvas进行截图
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // 获取Base64数据
+                capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
+                
+                // 显示拍摄的图像
+                const captureArea = document.getElementById('captureArea');
+                captureArea.innerHTML = `
+                    <div class="face-detection-overlay" id="faceOverlay">
+                        <img class="captured-image" src="${capturedImageData}" alt="拍摄的图像" />
+                    </div>
+                    <p style="margin-top: 10px; color: #28a745; font-weight: bold;">
+                        原图尺寸: ${canvas.width} x ${canvas.height}
+                    </p>
+                    <div id="croppedFacePreview" style="margin-top: 15px; display: none;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">🎯 裁剪后的人脸图像（将入库存储）:</h4>
+                        <img id="croppedFaceImage" class="captured-image" style="max-width: 200px; max-height: 200px;" />
+                    </div>
+                `;
+                
+                log(`✅ 图像拍摄成功！尺寸: ${canvas.width}x${canvas.height}`, 'success');
+                
+                // 进行人脸检测
+                await detectFaces();
+                
+            } catch (error) {
+                log(`❌ 拍摄失败: ${error.message}`, 'error');
+            } finally {
+                isProcessing = false;  // 清除处理状态
+            }
+        }
+
+        // 直连模式：从快照接口进行拍摄
+        async function captureImageLan() {
+            // 检查人员类型是否已加载
+            if (!profileTypesLoaded) {
+                log('人员类型数据尚未加载完成，请等待', 'warning');
+                if (!isProcessing) {
+                    await loadProfileTypes();
+                }
+                if (!profileTypesLoaded) {
+                    log('人员类型数据加载失败，无法进行人脸录入', 'error');
+                    return;
+                }
+            }
+
+            if (!deviceId) {
+                log('直连模式下需要选择摄像头或填写设备ID', 'error');
+                return;
+            }
+
+            if (!lanBaseUrl) {
+                log('直连基础地址未设置', 'error');
+                return;
+            }
+
+            try {
+                isProcessing = true;
+                log('开始抓取快照...', 'info');
+
+                const resp = await fetch(`${lanBaseUrl}/api/camera/snapshot?device_id=${deviceId}&ts=${Date.now()}`, { cache: 'no-store' });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const blob = await resp.blob();
+
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(new Error('读取快照失败'));
+                    reader.readAsDataURL(blob);
+                });
+
+                const imgInfo = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+                    img.onerror = () => reject(new Error('快照加载失败'));
+                    img.src = dataUrl;
+                });
+
+                capturedImageData = dataUrl;
+                const captureArea = document.getElementById('captureArea');
+                captureArea.innerHTML = `
+                    <div class="face-detection-overlay" id="faceOverlay">
+                        <img class="captured-image" src="${capturedImageData}" alt="拍摄的图像" />
+                    </div>
+                    <p style="margin-top: 10px; color: #28a745; font-weight: bold;">
+                        原图尺寸: ${imgInfo.width} x ${imgInfo.height}
+                    </p>
+                    <div id="croppedFacePreview" style="margin-top: 15px; display: none;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">🎯 裁剪后的人脸图像（将入库存储）:</h4>
+                        <img id="croppedFaceImage" class="captured-image" style="max-width: 200px; max-height: 200px;" />
+                    </div>
+                `;
+
+                log(`✅ 快照获取成功！尺寸: ${imgInfo.width}x${imgInfo.height}`, 'success');
+                await detectFaces();
+            } catch (e) {
+                log(`❌ 快照拍摄失败: ${e.message}`, 'error');
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        // 人脸检测
+        async function detectFaces() {
+            if (!apiClient || !capturedImageData) {
+                log('API客户端未初始化或无拍摄图像', 'error');
+                return;
+            }
+
+            try {
+                // 注意：这个函数由captureImage调用，isProcessing状态已经在captureImage中管理
+                log('开始人脸检测...', 'info');
+                
+                const response = await apiClient.post('/api/face/capture', {
+                    image: capturedImageData
+                });
+                
+                if (response.success) {
+                    detectedFaces = response.faces || [];
+                    log(`✅ 人脸检测完成，检测到 ${detectedFaces.length} 张人脸`, 'success');
+                    
+                    // 显示检测结果
+                    displayFaceDetectionResult();
+                    
+                    if (detectedFaces.length === 1) {
+                        // 只有一张人脸，裁剪人脸区域
+                        log('✅ 人脸检测成功，正在裁剪人脸区域...', 'success');
+                        const faceBox = detectedFaces[0].bbox;
+                        
+                        try {
+                            croppedFaceImageData = await cropFaceFromImage(capturedImageData, faceBox);
+                            
+                            // 显示裁剪后的人脸预览
+                            const croppedFacePreview = document.getElementById('croppedFacePreview');
+                            const croppedFaceImage = document.getElementById('croppedFaceImage');
+                            if (croppedFacePreview && croppedFaceImage) {
+                                croppedFaceImage.src = croppedFaceImageData;
+                                croppedFacePreview.style.display = 'block';
+                            }
+                            
+                            log('✅ 人脸区域裁剪完成，可以开始人员信息录入', 'success');
+                            updateProgress(4);
+                            updateSubmitButton();
+                        } catch (error) {
+                            log(`❌ 人脸裁剪失败: ${error.message}`, 'error');
+                            croppedFaceImageData = null;
+                            
+                            // 隐藏裁剪预览
+                            const croppedFacePreview = document.getElementById('croppedFacePreview');
+                            if (croppedFacePreview) {
+                                croppedFacePreview.style.display = 'none';
+                            }
+                            
+                            updateSubmitButton();
+                        }
+                    } else if (detectedFaces.length === 0) {
+                        log('⚠️ 未检测到人脸，请重新拍摄', 'warning');
+                        croppedFaceImageData = null;
+                        updateSubmitButton();
+                    } else {
+                        log(`⚠️ 检测到多张人脸 (${detectedFaces.length} 张)，请确保图片中只有一张人脸`, 'warning');
+                        croppedFaceImageData = null;
+                        updateSubmitButton();
+                    }
+                    
+                } else {
+                    throw new Error(response.error || '人脸检测失败');
+                }
+                
+            } catch (error) {
+                log(`❌ 人脸检测失败: ${error.message}`, 'error');
+                throw error;  // 向上抛出错误，由captureImage处理
+            }
+        }
+
+        // 显示人脸检测结果
+        function displayFaceDetectionResult() {
+            const overlay = document.getElementById('faceOverlay');
+            const img = overlay.querySelector('img');
+            
+            if (!img) return;
+            
+            // 等待图像完全加载
+            const waitForImageLoad = () => {
+                return new Promise((resolve) => {
+                    if (img.complete && img.naturalWidth > 0) {
+                        resolve();
+                    } else {
+                        img.onload = () => resolve();
+                    }
+                });
+            };
+            
+            waitForImageLoad().then(() => {
+                // 清除之前的检测框
+                const existingBoxes = overlay.querySelectorAll('.face-box');
+                existingBoxes.forEach(box => box.remove());
+                
+                // 为每个检测到的人脸添加检测框
+                detectedFaces.forEach((face, index) => {
+                    const [x, y, w, h] = face.bbox;
+                    const confidence = face.confidence;
+                    
+                    // 获取图像的实际尺寸信息
+                    const imgNaturalWidth = img.naturalWidth;
+                    const imgNaturalHeight = img.naturalHeight;
+                    const imgDisplayWidth = img.offsetWidth;
+                    const imgDisplayHeight = img.offsetHeight;
+                    
+                    console.log(`图像尺寸信息: 自然尺寸=${imgNaturalWidth}x${imgNaturalHeight}, 显示尺寸=${imgDisplayWidth}x${imgDisplayHeight}`);
+                    
+                    // 使用自然尺寸计算裁剪区域（这与实际裁剪时使用的尺寸一致）
+                    const { cropX, cropY, cropW, cropH } = calculateCropRegion(face.bbox, imgNaturalWidth, imgNaturalHeight);
+                    
+                    // 计算显示比例，考虑 object-fit: contain 的影响
+                    const naturalRatio = imgNaturalWidth / imgNaturalHeight;
+                    const displayRatio = imgDisplayWidth / imgDisplayHeight;
+                    
+                    let actualDisplayWidth, actualDisplayHeight, offsetX, offsetY;
+                    
+                    if (naturalRatio > displayRatio) {
+                        // 图像宽度填满容器，高度有空余
+                        actualDisplayWidth = imgDisplayWidth;
+                        actualDisplayHeight = imgDisplayWidth / naturalRatio;
+                        offsetX = 0;
+                        offsetY = (imgDisplayHeight - actualDisplayHeight) / 2;
+                    } else {
+                        // 图像高度填满容器，宽度有空余
+                        actualDisplayWidth = imgDisplayHeight * naturalRatio;
+                        actualDisplayHeight = imgDisplayHeight;
+                        offsetX = (imgDisplayWidth - actualDisplayWidth) / 2;
+                        offsetY = 0;
+                    }
+                    
+                    // 计算缩放比例
+                    const scaleX = actualDisplayWidth / imgNaturalWidth;
+                    const scaleY = actualDisplayHeight / imgNaturalHeight;
+                    
+                    console.log(`缩放信息: scaleX=${scaleX}, scaleY=${scaleY}, offsetX=${offsetX}, offsetY=${offsetY}`);
+                    
+                    const faceBox = document.createElement('div');
+                    faceBox.className = 'face-box';
+                    
+                    // 使用修正后的坐标和尺寸
+                    faceBox.style.left = (offsetX + cropX * scaleX) + 'px';
+                    faceBox.style.top = (offsetY + cropY * scaleY) + 'px';
+                    faceBox.style.width = (cropW * scaleX) + 'px';
+                    faceBox.style.height = (cropH * scaleY) + 'px';
+                    
+                    const confidenceLabel = document.createElement('div');
+                    confidenceLabel.className = 'face-confidence';
+                    confidenceLabel.textContent = `${(confidence * 100).toFixed(1)}%`;
+                    
+                    faceBox.appendChild(confidenceLabel);
+                    overlay.appendChild(faceBox);
+                    
+                    log(`人脸 ${index + 1}: 原始(${x},${y},${w},${h}) -> 裁剪(${cropX},${cropY},${cropW},${cropH}) -> 显示(${offsetX + cropX * scaleX},${offsetY + cropY * scaleY}), 置信度: ${(confidence * 100).toFixed(1)}%`, 'info');
+                });
+            });
+        }
+
+        // 提交人员注册
+        async function submitRegistration() {
+            // 验证表单
+            if (!validateForm()) {
+                log('请检查并修正表单中的错误', 'error');
+                return;
+            }
+
+            // 检查是否正在处理其他请求
+            if (isProcessing) {
+                log('系统正在处理其他请求，请稍后重试', 'warning');
+                return;
+            }
+
+            // 获取表单数据
+            const personName = document.getElementById('personName').value.trim();
+            const personType = document.getElementById('personType').value;
+            const roomId = document.getElementById('roomId').value.trim();
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            const idCardNumber = document.getElementById('idCardNumber').value.trim();
+            const location = document.getElementById('location').value.trim() || '人脸录入系统';
+
+            // 直连模式允许通过输入框提供设备ID
+            if (!deviceId) {
+                if (networkMode === 'lan') {
+                    const manualDeviceId = (document.getElementById('deviceIdInput')?.value || '').trim();
+                    if (!manualDeviceId) {
+                        log('直连模式下请填写设备ID', 'error');
+                        const errDiv = document.getElementById('deviceIdError');
+                        if (errDiv) errDiv.textContent = '请填写设备ID';
+                        return;
+                    }
+                    deviceId = manualDeviceId;
+                } else {
+                    log('设备ID缺失，请重新连接摄像头', 'error');
+                    return;
+                }
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading-spinner"></span> 提交中...';
+
+            try {
+                isProcessing = true;  // 设置处理状态
+                log('开始提交人员注册信息...', 'info');
+
+                const registrationData = {
+                    image: croppedFaceImageData,  // 使用裁剪后的人脸图像用于识别
+                    original_image: capturedImageData,  // 原始图像用于抓拍记录
+                    face_bbox: detectedFaces[0].bbox,  // 人脸检测框信息
+                    name: personName,
+                    type_id: personType,
+                    room_id: roomId || null,
+                    phone_number: phoneNumber || null,
+                    id_card_number: idCardNumber || null,
+                    location: location,
+                    device_id: deviceId.toString(),
+                    device_type: 0  // 0表示录入设备，用于生成存储路径
+                };
+
+                const response = await apiClient.post('/api/face/register', registrationData);
+
+                if (response.success) {
+                    log('✅ 人脸信息入库成功', 'success');
+                    
+                    // 显示成功结果
+                    const resultDiv = document.getElementById('registrationResult');
+                    const selectedTypeInfo = profileTypes.find(t => t.id == personType);
+                    
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <h4>✅ 入库成功！</h4>
+                            <p><strong>姓名:</strong> ${personName}</p>
+                            <p><strong>人员类型:</strong> ${response.type_name || (selectedTypeInfo ? selectedTypeInfo.type_name : '未知')}</p>
+                            <p><strong>存储位置:</strong> ${response.storage_location || '未知'}</p>
+                            <p><strong>Profile ID:</strong> ${response.profile_id}</p>
+                            <p><strong>${response.is_temporary ? 'TemporaryFace' : 'Face'} ID:</strong> ${response.face_id}</p>
+                            ${roomId ? `<p><strong>房间号:</strong> ${roomId}</p>` : ''}
+                            ${phoneNumber ? `<p><strong>手机号:</strong> ${phoneNumber}</p>` : ''}
+                        </div>
+                    `;
+
+                    updateProgress(5);
+                    
+                    const storageType = response.is_temporary ? '临时' : '正式';
+                    log(`人员 "${personName}" 已成功录入${storageType}人脸库`, 'success');
+                    log(`存储位置: ${response.storage_location}`, 'success');
+                    
+                } else {
+                    throw new Error(response.error || '入库失败');
+                }
+
+            } catch (error) {
+                log(`❌ 人员注册失败: ${error.message}`, 'error');
+                
+                const resultDiv = document.getElementById('registrationResult');
+                
+                // 判断是否为重复人脸的错误
+                const isDuplicateFace = error.message.includes('人脸信息已存在') || 
+                                       error.message.includes('已存在于正式库') ||
+                                       error.message.includes('无法重复录入') ||
+                                       error.message.includes('相似度为');
+                
+                let alertContent = '';
+                if (isDuplicateFace) {
+                    // 重复人脸的特殊处理
+                    alertContent = `
+                        <div class="alert alert-warning" style="border-left: 4px solid #ffc107;">
+                            <h4>⚠️ 重复人脸检测</h4>
+                            <div style="margin: 15px 0; padding: 12px; background-color: #fff8e1; border-radius: 5px;">
+                                <strong>详细说明:</strong> ${error.message}
+                            </div>
+                            <div style="margin-top: 15px;">
+                                <p style="margin: 5px 0;"><strong>💡 可能的解决方案:</strong></p>
+                                <ul style="margin: 5px 0 10px 20px; line-height: 1.6;">
+                                    <li>如果确认是新人员，请仔细检查拍摄的人脸图像是否清晰</li>
+                                    <li>尝试重新拍摄，确保光线充足、角度合适</li>
+                                    <li>如果确实是重复录入，请忽略此次操作</li>
+                                    <li>如有疑问，请联系系统管理员确认人员身份</li>
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 其他类型错误的处理
+                    alertContent = `
+                        <div class="alert alert-danger">
+                            <h4>❌ 入库失败</h4>
+                            <div style="margin: 15px 0; padding: 12px; background-color: #f8d7da; border-radius: 5px;">
+                                <strong>错误详情:</strong> ${error.message}
+                            </div>
+                            <div style="margin-top: 15px;">
+                                <p style="margin: 5px 0;"><strong>🔧 建议检查:</strong></p>
+                                <ul style="margin: 5px 0 10px 20px; line-height: 1.6;">
+                                    <li>确认所有必填信息已正确填写</li>
+                                    <li>检查人脸图像是否清晰完整</li>
+                                    <li>确认网络连接正常</li>
+                                    <li>如问题持续，请联系系统管理员</li>
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                resultDiv.innerHTML = alertContent;
+            } finally {
+                isProcessing = false;  // 清除处理状态
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '💾 提交入库';
+            }
+        }
+
+        // 重置表单
+        function resetForm() {
+            // 检查是否正在处理其他请求
+            if (isProcessing) {
+                log('系统正在处理其他请求，无法重置', 'warning');
+                return;
+            }
+
+            // 清空表单
+            document.getElementById('personName').value = '';
+            document.getElementById('personType').value = '';
+            document.getElementById('roomId').value = '';
+            document.getElementById('phoneNumber').value = '';
+            document.getElementById('idCardNumber').value = '';
+            document.getElementById('location').value = '人脸录入系统';
+            
+            // 清除所有验证状态
+            const formFields = ['personName', 'personType', 'phoneNumber', 'idCardNumber', 'roomId', 'location'];
+            formFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                const errorDiv = document.getElementById(fieldId + 'Error');
+                if (field && errorDiv) {
+                    field.classList.remove('error', 'valid');
+                    errorDiv.textContent = '';
+                }
+            });
+            
+            // 隐藏验证消息
+            document.getElementById('formValidationMessage').style.display = 'none';
+            document.getElementById('registrationResult').innerHTML = '';
+            
+            // 清空拍摄结果
+            document.getElementById('captureArea').innerHTML = '<p id="captureHint">请点击拍摄或上传按钮重新采集</p>';
+            
+            capturedImageData = null;
+            croppedFaceImageData = null;  // 清除裁剪后的人脸图像
+            detectedFaces = [];
+            // 清理设备ID输入
+            const devInput = document.getElementById('deviceIdInput');
+            const devErr = document.getElementById('deviceIdError');
+            if (devInput) devInput.value = '';
+            if (devErr) devErr.textContent = '';
+            
+            updateProgress(3);
+            updateSubmitButton();
+            log('表单已重置，请重新拍摄', 'info');
+        }
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', function() {
+            // 停止重连
+            isReconnecting = false;
+            clearAllTimeouts();
+            
+            if (webrtcChunker) {
+                webrtcChunker.stop();
+            }
+            if (ws) {
+                ws.close();
+            }
+            if (peerConnection) {
+                peerConnection.close();
+            }
+            // 停止本机摄像头流
+            try {
+                if (localStream) {
+                    localStream.getTracks().forEach(t => t.stop());
+                }
+            } catch (e) {}
+            // 停止直连预览轮询
+            try {
+                if (lanPreviewTimer) {
+                    clearInterval(lanPreviewTimer);
+                    lanPreviewTimer = null;
+                }
+            } catch (e) {}
+        });
+    </script>
+  </body>
+</html>

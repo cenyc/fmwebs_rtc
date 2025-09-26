@@ -78,7 +78,7 @@ export const useInternalServerStore = defineStore('internal_server', {
         const cfg = useConfigStore()
         const base = cfg.main_server?.replace(/\/$/, '') || ''
         if (base) {
-          const url = `${base}/fs/clients/list?tenant_id=${encodeURIComponent(tenant_id)}&enabled=1&page=1&page_size=1`
+          const url = `${base}/fs/client/list?tenant_id=${encodeURIComponent(tenant_id)}&enabled=1&page=1&page_size=1`
           const resp = await fetch(url, {
             headers: token ? { Authorization: `token ${token}` } : undefined,
             cache: 'no-store'
