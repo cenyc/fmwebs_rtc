@@ -90,10 +90,10 @@
       <div class="col-4">
         <p class="q-ml-md">最新导入</p>
         <q-card flat class="q-pa-md q-ml-md row">
-          <q-list v-for="item, key in latestImportData" :key="key" class="col-4">
+          <q-list v-for="(item, index) in latestImportData" :key="index" class="col-4">
             <q-item>
               <q-item-section>
-                <q-img :src="item.tmp_url || 'src/assets/avatar.png'">
+                <q-img :src="item._img || avatar">
                   <div class="absolute-top-left" style="background:#4876FF; opacity: .7; border-radius:10px 0 10px">
                     {{ item.name }}
                   </div>
@@ -112,9 +112,10 @@ import SIProfileIdInput from 'src/components/siinputs/SIProfileIdInput.vue'
 import main from 'src/api/main'
 import { useUserStore } from 'src/stores/user'
 import { useInternalServerStore } from 'src/stores/internal_server'
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { formatDate } from 'src/utils/tools'
 import { $success, $error } from 'src/utils/notify'
+import avatar from 'src/assets/avatar.png'
 
 const userStore = useUserStore()
 const internal = useInternalServerStore()
@@ -142,8 +143,8 @@ const formData = ref({})
 const latestImportData = ref([])
 main.dataList('fs/profiles', { page: 1, page_size: 9, tenant_id: userStore.tenant_id }).then((res) => {
   latestImportData.value = res.data
+  loadLatestImportImages()
 })
-
 const canCapture = computed(() => {
   if (connMode.value === 'lan') return !!selectedCamera.value && previewing.value
   // WebRTC 模式后续扩展
@@ -181,22 +182,36 @@ async function ensureImageClient() {
       return null
     }
   }
+  internal.loadDefaultsFromConfig()
   await internal.getValidApiKey(userStore.tenant_id, userStore.token)
-  const cfg = {
-    // INTERNAL_IP: internal.effectiveInternalIp,
-    INTERNAL_IP: "172.31.144.1",
-    // INTERNAL_PORT: getInternalPort(),
-    INTERNAL_PORT: 5002,
+  imageClientRef.value = new ImageAccessClient({
+    INTERNAL_IP: internal.effectiveInternalIp || undefined,
+    INTERNAL_PORT: internal.INTERNAL_PORT || 5002,
     SIGNALING_URL: internal.SIGNALING_URL,
     AUTH_URL: internal.AUTH_URL,
-    // API_KEY: internal.api_key,
-    API_KEY: "MZQLIQgR7bHWKWDxlYrywk9mG69wBKztOdnZEZupFLwKEei81eAhjDxyARod9dce",
+    API_KEY: internal.api_key,
     IMAGE_ENDPOINT: internal.IMAGE_ENDPOINT || '/api/images/by-path',
     LAN_TIMEOUT_MS: internal.LAN_TIMEOUT_MS || 3500,
     LOG_ENABLED: false
-  }
-  imageClientRef.value = new ImageAccessClient(cfg)
+  })
   return imageClientRef.value
+}
+
+async function loadLatestImportImages() {
+  const client = await ensureImageClient()
+  if (!client || !Array.isArray(latestImportData.value) || latestImportData.value.length === 0) return
+  for (const item of latestImportData.value) {
+    const path = item?.image_url || item?.tmp_url
+    if (!path || typeof path !== 'string') continue
+    try {
+      const result = await client.fetchImageWithRetry(path, 1)
+      const prev = item._img
+      const ownUrl = URL.createObjectURL(result.blob)
+      item._img = ownUrl
+      try { if (result.objectUrl && result.objectUrl !== ownUrl) URL.revokeObjectURL(result.objectUrl) } catch (e) { void e }
+      try { if (prev && typeof prev === 'string' && prev.startsWith('blob:')) URL.revokeObjectURL(prev) } catch (e) { void e }
+    } catch (e) { void e }
+  }
 }
 
 function fetchWithTimeout(url, timeoutMs = 3500) {
@@ -386,9 +401,11 @@ const onSubmit = () => {
         id: r.data.id,
         name: formData.value.name,
         tmp_url: res.data.url,
+        image_url: res.data.url,
         created_time: new Date().toISOString()
       })
       if (latestImportData.value.length > 9) latestImportData.value.pop()
+      loadLatestImportImages()
       $success('导入成功')
       formData.value = {}
       base64Image.value = null
@@ -420,6 +437,20 @@ onMounted(() => {
   // 可自动探测并连接
   // connectCameras()
 })
+
+onBeforeUnmount(() => {
+  try {
+    if (Array.isArray(latestImportData.value)) {
+      latestImportData.value.forEach(it => {
+        if (it && typeof it._img === 'string' && it._img.startsWith('blob:')) {
+          try { URL.revokeObjectURL(it._img) } catch (e) { void e }
+        }
+      })
+    }
+  } catch (e) { void e }
+  try { imageClientRef.value?.close() } catch (e) { void e }
+})
+
 </script>
 <style lang="scss" scoped>
 .q-img__content>div {
@@ -451,3 +482,7 @@ onMounted(() => {
   .q-select .q-field__input { max-width: 114px; }
 }
 </style>
+
+
+
+
