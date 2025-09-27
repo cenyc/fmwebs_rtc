@@ -64,16 +64,24 @@
                 </div>
                 <div class="si-input border">
                   <label for="name">人员姓名</label>
-                  <q-input dense borderless v-model="formData.name" label="请输入姓名" />
+                  <q-input dense borderless v-model="formData.name" label="可选，请输入姓名" />
                 </div>
                 <div class="si-input border">
                   <label for="type_id">人员类型</label>
                   <SIProfileIdInput v-model="typeId" label="请选择人员类型" field-name="type_id" :extra="{ label: 'type_name', value: 'type_id', dir: '/type' }" />
                 </div>
-                <div class="si-input border">
-                  <label for="room_id">关联房间</label>
-                  <q-input dense borderless v-model="formData.room_id" label="请输入房间号" />
-                </div>
+              <div class="si-input border">
+                <label for="room_id">关联房间</label>
+                <q-input dense borderless v-model="formData.room_id" label="可选，请输入房间号" />
+              </div>
+              <div class="si-input border">
+                <label for="phone_number">联系电话</label>
+                <q-input dense borderless v-model="formData.phone_number" label="可选，11位手机号" />
+              </div>
+              <div class="si-input border">
+                <label for="id_card_number">身份证号</label>
+                <q-input dense borderless v-model="formData.id_card_number" label="可选，18位身份证号" />
+              </div>
                 <div class="si-input q-my-md">
                   <q-btn unelevated rounded color="primary" class="q-px-lg" :loading="loading" @click="onSubmit" :disable="!canSubmit">提交</q-btn>
                   <q-btn unelevated rounded color="secondary" class="q-ml-md q-px-lg" :disable="loading" @click="onReset">重置</q-btn>
@@ -337,7 +345,7 @@ async function connectCameras() {
       const list = lanList
       const meta = {}
       cameraOptions.value = list.map((cam) => {
-        meta[cam.device_id] = { fps: cam.fps || 10, name: cam.name, resolution: cam.resolution }
+        meta[cam.device_id] = { fps: cam.fps || 10, name: cam.name, resolution: cam.resolution, location: cam.location }
         return { label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
                  value: cam.device_id }
       })
@@ -354,7 +362,7 @@ async function connectCameras() {
       const meta = {}
       cameraOptions.value = list.map((entry) => {
         const cam = entry.camera
-        meta[cam.device_id] = { fps: cam.fps || 15, name: cam.name, resolution: cam.resolution }
+        meta[cam.device_id] = { fps: cam.fps || 15, name: cam.name, resolution: cam.resolution, location: cam.location }
         return { label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
                  value: cam.device_id }
       })
@@ -527,8 +535,11 @@ const onSubmit = async () => {
       original_image: lastCapture.value?.original || null,
       face_bbox: lastCapture.value?.faceBox || null,
       name: formData.value.name || '',
-      type_id: typeId.value?.type_id,
+      type_id: (typeId.value?.type_id != null ? String(typeId.value?.type_id) : ''),
       room_id: formData.value.room_id || null,
+      phone_number: formData.value.phone_number || null,
+      id_card_number: formData.value.id_card_number || null,
+      location: (cameraMeta.value?.[selectedCameraId.value]?.location || cameraMeta.value?.[selectedCameraId.value]?.name || null),
       device_id: (selectedCameraId.value || '').toString(),
       device_type: 0
     }
@@ -540,17 +551,30 @@ const onSubmit = async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(registrationData)
       })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      if (!data?.success) throw new Error(data?.error || '入库失败')
+      let data = null
+      try { data = await resp.json() } catch { /* ignore parse error */ }
+      if (!resp.ok) {
+        const msg = data?.detail || data?.error || data?.message || `HTTP ${resp.status}`
+        throw new Error(msg)
+      }
+      if (!data?.success) throw new Error(data?.detail || data?.error || '入库失败')
     } else {
       const client = await ensureImageClient(selectedRemoteClientId.value || null)
       if (!client) throw new Error('远程连接组件未就绪')
       try { await client.preEstablishWebRTCConnection() } catch { throw new Error('远程连接失败') }
       const api = client?.remoteClient?.apiClient
       if (!api) throw new Error('远程数据通道未就绪')
-      const data = await api.post('/api/face/register', registrationData)
-      if (!data?.success) throw new Error(data?.error || '入库失败')
+      let data
+      try {
+        // RemoteAPIClient 通过数据通道返回JSON对象
+        data = await (api.post ? api.post('/api/face/register', registrationData) : api.request('POST', '/api/face/register', registrationData))
+      } catch (err) {
+        throw new Error(err?.message || '远程入库失败')
+      }
+      if (!data?.success) {
+        const msg = data?.detail || data?.error || data?.message || '入库失败'
+        throw new Error(msg)
+      }
     }
 
     latestImportData.value.unshift({
@@ -680,7 +704,7 @@ async function openSignalingAndDiscoverCameras() {
           for (const client of list) {
             const cams = Array.isArray(client.cameras) ? client.cameras.filter(c => c.func_type === 2) : []
             for (const cam of cams) {
-              map[cam.device_id] = { clientId: client.id, index: cam.index, type: cam.type, name: cam.name, resolution: cam.resolution, fps: cam.fps }
+              map[cam.device_id] = { clientId: client.id, index: cam.index, type: cam.type, name: cam.name, resolution: cam.resolution, fps: cam.fps, location: cam.location }
               entries.push({ clientId: client.id, camera: cam })
             }
           }
@@ -689,7 +713,7 @@ async function openSignalingAndDiscoverCameras() {
           const meta = {}
           cameraOptions.value = entries.map((entry) => {
             const cam = entry.camera
-            meta[cam.device_id] = { fps: cam.fps || 15, name: cam.name, resolution: cam.resolution }
+            meta[cam.device_id] = { fps: cam.fps || 15, name: cam.name, resolution: cam.resolution, location: cam.location }
             return { label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
                      value: cam.device_id }
           })
