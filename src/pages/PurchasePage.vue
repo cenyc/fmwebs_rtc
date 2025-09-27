@@ -17,13 +17,10 @@
                   {{ connecting ? '连接中' : '连接/刷新' }}
                 </q-btn>
               </div>
-              <div class="si-input border col">
+              <div class="si-input border col" v-if="cameraOptions.length > 1">
                 <label for="camera">摄像头</label>
-                <q-select dense borderless v-model="selectedCamera" :options="cameraOptions" :loading="cameraLoading"
-                  option-label="label" option-value="value" label="请选择摄像头" />
-              </div>
-              <div class="col-auto">
-                <q-toggle v-model="previewing" color="primary" @update:model-value="togglePreview" label="预览" />
+                <q-select dense borderless v-model="selectedCameraId" :options="cameraOptions" :loading="cameraLoading"
+                  emit-value map-options option-label="label" option-value="value" label="请选择摄像头" @update:model-value="onCameraSelected" />
               </div>
             </div>
 
@@ -31,7 +28,10 @@
             <div class="row q-col-gutter-md">
               <div class="col-7">
                 <div class="preview-box column items-center justify-center">
-                  <template v-if="previewing && streamUrl">
+                  <template v-if="connMode === 'webrtc'">
+                    <video ref="videoEl" autoplay muted playsinline class="preview-img"></video>
+                  </template>
+                  <template v-else-if="streamUrl">
                     <img :src="streamUrl" alt="预览" class="preview-img" @error="onStreamError" />
                   </template>
                   <template v-else>
@@ -50,7 +50,6 @@
               </div>
               <div class="col-5">
                 <div class="si-input border q-pb-sm">
-                  <label for="image">采集图片</label>
                   <q-avatar rounded size="120px">
                     <q-btn outline stack color="primary" class="full-width full-height" @click="fileInput.pickFiles()">
                       <template v-if="base64Image">
@@ -62,21 +61,18 @@
                       </template>
                     </q-btn>
                   </q-avatar>
-                  <div class="hint q-ml-lg">
-                    建议上传比例1:1，png、jpeg、jpg格式,1M以内的图片
-                  </div>
                 </div>
                 <div class="si-input border">
                   <label for="name">人员姓名</label>
-                  <q-input dense borderless v-model="formData.name" :rules="[val => !!val || '姓名不能为空']" lazy-rules label="请输入姓名" />
+                  <q-input dense borderless v-model="formData.name" label="请输入姓名" />
                 </div>
                 <div class="si-input border">
-                  <label for="type_id">面部属性</label>
+                  <label for="type_id">人员类型</label>
                   <SIProfileIdInput v-model="typeId" label="请选择人员类型" field-name="type_id" :extra="{ label: 'type_name', value: 'type_id', dir: '/type' }" />
                 </div>
                 <div class="si-input border">
                   <label for="room_id">关联房间</label>
-                  <q-input dense borderless v-model="formData.room_id" :rules="[val => !!val || '房间号不能为空']" lazy-rules label="请输入房间号" />
+                  <q-input dense borderless v-model="formData.room_id" label="请输入房间号" />
                 </div>
                 <div class="si-input q-my-md">
                   <q-btn unelevated rounded color="primary" class="q-px-lg" :loading="loading" @click="onSubmit" :disable="!canSubmit">提交</q-btn>
@@ -132,12 +128,24 @@ const connModeOptions = [
   { label: 'WebRTC 远程', value: 'webrtc' }
 ]
 const cameraOptions = ref([])
-const selectedCamera = ref(null)
-const previewing = ref(false)
+const selectedCameraId = ref(null)
+const cameraMeta = ref({}) // device_id -> { fps, resolution, name, ... }
 const streamUrl = ref('')
-const remotePreviewTimer = ref(null)
+const videoEl = ref(null)
+const lanPreviewTimer = ref(null)
+const lanPreviewMode = ref('mjpeg') // 'mjpeg' | 'snapshot'
 const imageClientRef = ref(null)
+const imageClientTargetId = ref(null)
+const lastCapture = ref({ original: null, faceBox: null })
 const formData = ref({})
+// WebRTC 远程信令与流
+const webrtcWs = ref(null)
+const webrtcToken = ref('')
+const webrtcClientId = ref('')
+const webrtcPeer = ref(null)
+const webrtcConnected = ref(false)
+const remoteCameras = ref({}) // device_id -> { clientId, index, type, name, resolution, fps }
+const selectedRemoteClientId = ref(null)
 
 // 最新导入数据
 const latestImportData = ref([])
@@ -146,31 +154,32 @@ main.dataList('fs/profiles', { page: 1, page_size: 9, tenant_id: userStore.tenan
   loadLatestImportImages()
 })
 const canCapture = computed(() => {
-  if (connMode.value === 'lan') return !!selectedCamera.value && previewing.value
-  // WebRTC 模式后续扩展
+  if (connMode.value === 'lan') return !!selectedCameraId.value
+  if (connMode.value === 'webrtc') return !!(selectedCameraId.value && selectedRemoteClientId.value)
   return false
 })
 
 const canSubmit = computed(() => {
-  return !!base64Image.value && !!formData.value.name && !!typeId.value?.type_id && !!formData.value.room_id
+  // 仅要求已采集图片且已选择人员类型；姓名与房间可为空
+  return !!base64Image.value && !!typeId.value?.type_id
 })
 
-function getInternalPort() {
-  // 兼容 apiPort、INTERNAL_API_PORT、INTERNAL_PORT
-  // @ts-ignore
-  return internal.apiPort || internal.INTERNAL_API_PORT || internal.INTERNAL_PORT || 5002
-}
-
-function getLanBaseUrl() {
+function getLanApiBaseUrl() {
   internal.loadDefaultsFromConfig()
   const ip = internal.effectiveInternalIp
-  const port = getInternalPort()
+  const port = internal.INTERNAL_API_PORT || 5001
   if (!ip) return ''
-  const proto = 'http://'
-  return `${proto}${ip}:${port}`
+  return `http://${ip}:${port}`
 }
 
-async function ensureImageClient() {
+// 所有 /api/camera/* 统一使用 WebAPI 端口（见 getLanApiBaseUrl）
+
+async function ensureImageClient(targetId = null) {
+  if (targetId && imageClientTargetId.value && imageClientTargetId.value !== targetId) {
+    try { imageClientRef.value?.close() } catch (e) { void e }
+    imageClientRef.value = null
+    imageClientTargetId.value = null
+  }
   if (imageClientRef.value) return imageClientRef.value
   let ImageAccessClient = window?.ImageAccessClient
   if (!ImageAccessClient) {
@@ -192,8 +201,10 @@ async function ensureImageClient() {
     API_KEY: internal.api_key,
     IMAGE_ENDPOINT: internal.IMAGE_ENDPOINT || '/api/images/by-path',
     LAN_TIMEOUT_MS: internal.LAN_TIMEOUT_MS || 3500,
-    LOG_ENABLED: false
+    LOG_ENABLED: false,
+    REMOTE_TARGET_ID: targetId || selectedRemoteClientId.value || undefined
   })
+  imageClientTargetId.value = targetId || selectedRemoteClientId.value || null
   return imageClientRef.value
 }
 
@@ -221,28 +232,82 @@ function fetchWithTimeout(url, timeoutMs = 3500) {
 }
 
 async function startRemotePreview(deviceId) {
-  const client = await ensureImageClient()
-  if (!client) return
-  try { await client.preEstablishWebRTCConnection() } catch { $error('远程连接失败'); return }
-  stopRemotePreview()
-  remotePreviewTimer.value = setInterval(async () => {
-    try {
-      const api = client?.remoteClient?.apiClient
-      if (!api) return
-      const resp = await api.get(`/api/camera/snapshot?device_id=${encodeURIComponent(deviceId)}&ts=${Date.now()}`)
-      if (resp && (resp.image_base64 || resp.data_base64)) {
-        const b64 = resp.image_base64 || resp.data_base64
-        streamUrl.value = `data:image/jpeg;base64,${b64}`
+  try {
+    // 确保已通过信令发现并记录了设备映射
+    const cam = remoteCameras.value?.[deviceId]
+    if (!cam) {
+      $error('未获取到远程摄像头映射，请先连接/刷新')
+      return
+    }
+    selectedRemoteClientId.value = cam.clientId
+    // 关闭旧的预览
+    stopRemotePreview()
+    // 准备 PeerConnection
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'turn:120.55.85.213:3478', username: 'cenyc', credential: 'cenyc' }
+      ]
+    }
+    webrtcPeer.value = new RTCPeerConnection(rtcConfig)
+    webrtcConnected.value = false
+    // 媒体轨接收
+    webrtcPeer.value.addTransceiver('video', { direction: 'recvonly' })
+    webrtcPeer.value.ontrack = (ev) => {
+      const stream = ev.streams && ev.streams[0]
+      if (stream && videoEl.value) {
+        videoEl.value.srcObject = stream
       }
-    } catch { /* ignore */ }
-  }, 1000)
+    }
+    // ICE
+    webrtcPeer.value.onicecandidate = (e) => {
+      if (e.candidate && webrtcWs.value && webrtcWs.value.readyState === WebSocket.OPEN) {
+        webrtcWs.value.send(JSON.stringify({
+          type: 'ice-candidate',
+          data: {
+            candidate: e.candidate.candidate,
+            sdpMid: e.candidate.sdpMid,
+            sdpMLineIndex: e.candidate.sdpMLineIndex
+          },
+          target: cam.clientId,
+          source: webrtcClientId.value
+        }))
+      }
+    }
+    webrtcPeer.value.onconnectionstatechange = () => {
+      webrtcConnected.value = (webrtcPeer.value?.connectionState === 'connected')
+    }
+
+    // 创建并发送 offer
+    const offer = await webrtcPeer.value.createOffer()
+    await webrtcPeer.value.setLocalDescription(offer)
+    if (!webrtcWs.value || webrtcWs.value.readyState !== WebSocket.OPEN) {
+      await openSignalingIfNeeded()
+    }
+    webrtcWs.value.send(JSON.stringify({
+      type: 'offer',
+      data: { sdp: offer.sdp, type: offer.type },
+      target: cam.clientId,
+      source: webrtcClientId.value,
+      camera_index: parseInt(cam.index ?? -1),
+      camera_type: cam.type || 'local'
+    }))
+  } catch (e) {
+    $error(e.message || '远程预览连接失败')
+  }
 }
 
 function stopRemotePreview() {
-  if (remotePreviewTimer.value) {
-    clearInterval(remotePreviewTimer.value)
-    remotePreviewTimer.value = null
-  }
+  try {
+    if (videoEl.value && videoEl.value.srcObject) {
+      try { (videoEl.value.srcObject.getTracks() || []).forEach(t => t.stop()) } catch (e) { void e }
+      videoEl.value.srcObject = null
+    }
+  } catch (e) { void e }
+  try { webrtcPeer.value?.close() } catch (e) { void e }
+  webrtcPeer.value = null
 }
 
 async function connectCameras() {
@@ -250,53 +315,53 @@ async function connectCameras() {
   cameraLoading.value = true
   try {
     cameraOptions.value = []
-    selectedCamera.value = null
+    selectedCameraId.value = null
 
     // 自动探测：优先尝试局域网
-    const base = getLanBaseUrl()
-    let lanOk = false
+    const base = getLanApiBaseUrl()
+    let lanList = []
     if (base) {
       try {
-        const ping = await fetchWithTimeout(`${base}/api/camera/list?func_type=2&ts=${Date.now()}`, internal.LAN_TIMEOUT_MS || 3500)
-        lanOk = ping.ok
-      } catch { lanOk = false }
+        const resp = await fetchWithTimeout(`${base}/api/camera/list?func_type=2`, internal.LAN_TIMEOUT_MS || 3500)
+        if (resp.ok) {
+          const json = await resp.json()
+          lanList = Array.isArray(json?.devices) ? json.devices
+            : (Array.isArray(json?.data) ? json.data : [])
+        }
+      } catch { /* ignore */ }
     }
 
-    if (lanOk) {
+    if (lanList.length > 0) {
       connMode.value = 'lan'
-      const resp = await fetch(`${base}/api/camera/list?func_type=2&ts=${Date.now()}`)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const json = await resp.json()
-      const list = Array.isArray(json?.data) ? json.data : []
-      if (list.length === 0) { $error('未发现手动录入摄像头'); return }
-      cameraOptions.value = list.map((cam) => ({
-        label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
-        value: { device_id: cam.device_id, fps: cam.fps || 10 }
-      }))
+      // 构建元数据映射与下拉列表（多台才显示下拉）
+      const list = lanList
+      const meta = {}
+      cameraOptions.value = list.map((cam) => {
+        meta[cam.device_id] = { fps: cam.fps || 10, name: cam.name, resolution: cam.resolution }
+        return { label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
+                 value: cam.device_id }
+      })
+      cameraMeta.value = meta
       if (list.length === 1) {
-        selectedCamera.value = { device_id: list[0].device_id, fps: list[0].fps || 10 }
-        previewing.value = true
-        togglePreview(true)
+        selectedCameraId.value = list[0].device_id
+        await startLanPreview(selectedCameraId.value)
       }
     } else {
-      // 远程 WebRTC
+      // 远程 WebRTC（按 Demo 的方式通过信令发现与连接）
       connMode.value = 'webrtc'
-      const client = await ensureImageClient()
-      if (!client) { $error('远程连接组件未就绪'); return }
-      try { await client.preEstablishWebRTCConnection() } catch { $error('远程连接失败'); return }
-      const api = client?.remoteClient?.apiClient
-      if (!api) { $error('远程数据通道未就绪'); return }
-      const resp = await api.get(`/api/camera/list?func_type=2`)
-      const list = Array.isArray(resp?.data) ? resp.data : []
-      if (list.length === 0) { $error('远程未发现手动录入摄像头'); return }
-      cameraOptions.value = list.map((cam) => ({
-        label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
-        value: { device_id: cam.device_id, fps: cam.fps || 1 }
-      }))
+      const list = await openSignalingAndDiscoverCameras()
+      if (!Array.isArray(list) || list.length === 0) { $error('远程未发现手动录入摄像头'); return }
+      const meta = {}
+      cameraOptions.value = list.map((entry) => {
+        const cam = entry.camera
+        meta[cam.device_id] = { fps: cam.fps || 15, name: cam.name, resolution: cam.resolution }
+        return { label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
+                 value: cam.device_id }
+      })
+      cameraMeta.value = meta
       if (list.length === 1) {
-        selectedCamera.value = { device_id: list[0].device_id, fps: list[0].fps || 1 }
-        previewing.value = true
-        await startRemotePreview(selectedCamera.value.device_id)
+        selectedCameraId.value = list[0].camera.device_id
+        await startRemotePreview(selectedCameraId.value)
       }
     }
   } catch (err) {
@@ -307,60 +372,131 @@ async function connectCameras() {
   }
 }
 
-function togglePreview(val) {
-  if (!val) {
-    streamUrl.value = ''
-    stopRemotePreview()
-    return
-  }
-  if (connMode.value === 'lan' && selectedCamera.value?.device_id) {
-    const base = getLanBaseUrl()
-    const fps = selectedCamera.value.fps || 10
-    streamUrl.value = `${base}/api/camera/stream_mjpeg?device_id=${encodeURIComponent(selectedCamera.value.device_id)}&fps=${fps}&ts=${Date.now()}`
-  } else if (connMode.value === 'webrtc' && selectedCamera.value?.device_id) {
-    startRemotePreview(selectedCamera.value.device_id)
-  } else {
-    streamUrl.value = ''
+function onCameraSelected() {
+  if (!selectedCameraId.value) return
+  if (connMode.value === 'lan') {
+    startLanPreview(selectedCameraId.value)
+  } else if (connMode.value === 'webrtc') {
+    startRemotePreview(selectedCameraId.value)
   }
 }
 
 function onStreamError() {
-  // 预览失败时，尝试快速刷新一次
-  if (streamUrl.value) {
-    streamUrl.value = streamUrl.value.replace(/(&ts=)\d+$/, `$1${Date.now()}`)
+  // 局域网 MJPEG 失败时，回退到快照轮询
+  if (connMode.value === 'lan' && selectedCameraId.value && lanPreviewMode.value !== 'snapshot') {
+    startLanSnapshotPreview(selectedCameraId.value)
   }
+}
+
+function clamp(val, min, max) { return Math.max(min, Math.min(max, val)) }
+
+async function cropFaceFromDataUrl(imageDataUrl, bbox) {
+  return await new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const imgW = img.width
+      const imgH = img.height
+      const [x, y, w, h] = Array.isArray(bbox) ? bbox : (bbox?.bbox || [0, 0, imgW, imgH])
+      const cx = x + w / 2
+      const cy = y + h / 2
+      const side = Math.min(Math.max(w, h) * 1.2, Math.min(imgW, imgH))
+      const sx = clamp(Math.round(cx - side / 2), 0, Math.max(0, imgW - Math.round(side)))
+      const sy = clamp(Math.round(cy - side / 2), 0, Math.max(0, imgH - Math.round(side)))
+      const s = Math.round(side)
+      const canvas = document.createElement('canvas')
+      canvas.width = s
+      canvas.height = s
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, s, s)
+      resolve(canvas.toDataURL('image/jpeg', 0.95))
+    }
+    img.onerror = () => reject(new Error('裁剪失败'))
+    img.src = imageDataUrl
+  })
+}
+
+async function detectFacesLan(imageDataUrl) {
+  const base = getLanApiBaseUrl()
+  const resp = await fetch(`${base}/api/face/capture`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageDataUrl })
+  })
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  const json = await resp.json()
+  return Array.isArray(json?.faces) ? json.faces : []
+}
+
+async function detectFacesRemote(imageDataUrl) {
+  const client = await ensureImageClient(selectedRemoteClientId.value || null)
+  if (!client) throw new Error('远程连接组件未就绪')
+  try { await client.preEstablishWebRTCConnection() } catch { throw new Error('远程连接失败') }
+  const api = client?.remoteClient?.apiClient
+  if (!api) throw new Error('远程数据通道未就绪')
+  const resp = await api.post(`/api/face/capture`, { image: imageDataUrl })
+  return Array.isArray(resp?.faces) ? resp.faces : []
+}
+
+function pickBestFace(faces) {
+  if (!Array.isArray(faces) || faces.length === 0) return null
+  let best = faces[0]
+  let bestArea = 0
+  for (const f of faces) {
+    const bb = Array.isArray(f) ? f : (f?.bbox || [0,0,0,0])
+    const area = (bb[2] || 0) * (bb[3] || 0)
+    if (area >= bestArea) { best = f; bestArea = area }
+  }
+  return best
 }
 
 async function captureSnapshot() {
   try {
-    if (connMode.value === 'lan' && selectedCamera.value?.device_id) {
-      const base = getLanBaseUrl()
-      const url = `${base}/api/camera/snapshot?device_id=${encodeURIComponent(selectedCamera.value.device_id)}&ts=${Date.now()}`
+    if (connMode.value === 'lan' && selectedCameraId.value) {
+      const base = getLanApiBaseUrl()
+      const url = `${base}/api/camera/snapshot?device_id=${encodeURIComponent(selectedCameraId.value)}&ts=${Date.now()}`
       const img = new Image()
-      // 避免跨域污染画布
       img.crossOrigin = 'anonymous'
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        const size = Math.min(img.width, img.height)
-        canvas.width = size
-        canvas.height = size
-        const ctx = canvas.getContext('2d')
-        const sx = Math.max(0, (img.width - size) / 2)
-        const sy = Math.max(0, (img.height - size) / 2)
-        ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size)
-        base64Image.value = canvas.toDataURL('image/jpeg', 0.92)
+      img.onload = async () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width
+          canvas.height = img.height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+          const faces = await detectFacesLan(dataUrl)
+          if (!faces?.length) { $error('未检测到人脸'); return }
+          if (faces.length > 1) { $error(`检测到${faces.length}张人脸，请确保只有一人`); return }
+          const best = pickBestFace(faces)
+          const cropped = await cropFaceFromDataUrl(dataUrl, best?.bbox || best)
+          base64Image.value = cropped
+          lastCapture.value = { original: dataUrl, faceBox: (best?.bbox || best) }
+        } catch (e) {
+          $error(e.message || '人脸检测失败')
+        }
       }
       img.onerror = () => $error('抓拍失败，请重试')
       img.src = url
-    } else if (connMode.value === 'webrtc' && selectedCamera.value?.device_id) {
-      const client = await ensureImageClient()
+    } else if (connMode.value === 'webrtc' && selectedCameraId.value) {
+      const client = await ensureImageClient(selectedRemoteClientId.value || null)
       if (!client) { $error('远程连接组件未就绪'); return }
       try { await client.preEstablishWebRTCConnection() } catch { $error('远程连接失败'); return }
       const api = client?.remoteClient?.apiClient
       if (!api) { $error('远程数据通道未就绪'); return }
-      const resp = await api.get(`/api/camera/snapshot?device_id=${encodeURIComponent(selectedCamera.value.device_id)}&ts=${Date.now()}`)
+      const resp = await api.get(`/api/camera/snapshot?device_id=${encodeURIComponent(selectedCameraId.value)}&ts=${Date.now()}`)
       if (resp && (resp.image_base64 || resp.data_base64)) {
-        base64Image.value = `data:image/jpeg;base64,${resp.image_base64 || resp.data_base64}`
+        const dataUrl = `data:image/jpeg;base64,${resp.image_base64 || resp.data_base64}`
+        try {
+          const faces = await detectFacesRemote(dataUrl)
+          if (!faces?.length) { $error('未检测到人脸'); return }
+          if (faces.length > 1) { $error(`检测到${faces.length}张人脸，请确保只有一人`); return }
+          const best = pickBestFace(faces)
+          const cropped = await cropFaceFromDataUrl(dataUrl, best?.bbox || best)
+          base64Image.value = cropped
+          lastCapture.value = { original: dataUrl, faceBox: (best?.bbox || best) }
+        } catch (e) {
+          $error(e.message || '人脸检测失败')
+        }
       } else {
         $error('抓拍失败')
       }
@@ -379,43 +515,61 @@ const handleFileSelect = (file) => {
   reader.readAsDataURL(file)
 }
 
-const onSubmit = () => {
+const onSubmit = async () => {
   if (!canSubmit.value) {
     $error('请完善信息并采集图片')
     return
   }
   loading.value = true
-  // 先上传图片
-  main.dataPost('header/face/img', {
-    img_parent: formData.value.name,
-    image_base64: base64Image.value
-  }).then(res => {
-    // 新增人员信息
-    return main.dataNew('fs/profiles', {
-      ...formData.value,
+  try {
+    const registrationData = {
+      image: base64Image.value,
+      original_image: lastCapture.value?.original || null,
+      face_bbox: lastCapture.value?.faceBox || null,
+      name: formData.value.name || '',
       type_id: typeId.value?.type_id,
-      tenant_id: userStore.tenant_id,
-      tmp_url: res.data.url
-    }).then((r) => {
-      latestImportData.value.unshift({
-        id: r.data.id,
-        name: formData.value.name,
-        tmp_url: res.data.url,
-        image_url: res.data.url,
-        created_time: new Date().toISOString()
+      room_id: formData.value.room_id || null,
+      device_id: (selectedCameraId.value || '').toString(),
+      device_type: 0
+    }
+
+    if (connMode.value === 'lan') {
+      const base = getLanApiBaseUrl()
+      const resp = await fetch(`${base}/api/face/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registrationData)
       })
-      if (latestImportData.value.length > 9) latestImportData.value.pop()
-      loadLatestImportImages()
-      $success('导入成功')
-      formData.value = {}
-      base64Image.value = null
-      typeId.value = null
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      if (!data?.success) throw new Error(data?.error || '入库失败')
+    } else {
+      const client = await ensureImageClient(selectedRemoteClientId.value || null)
+      if (!client) throw new Error('远程连接组件未就绪')
+      try { await client.preEstablishWebRTCConnection() } catch { throw new Error('远程连接失败') }
+      const api = client?.remoteClient?.apiClient
+      if (!api) throw new Error('远程数据通道未就绪')
+      const data = await api.post('/api/face/register', registrationData)
+      if (!data?.success) throw new Error(data?.error || '入库失败')
+    }
+
+    latestImportData.value.unshift({
+      id: Date.now(),
+      name: formData.value.name || '',
+      _img: base64Image.value,
+      created_time: new Date().toISOString()
     })
-  }).catch(err => {
-    $error(err.message || '上传失败')
-  }).finally(() => {
+    if (latestImportData.value.length > 9) latestImportData.value.pop()
+    $success('导入成功')
+    formData.value = {}
+    base64Image.value = null
+    typeId.value = null
+    lastCapture.value = { original: null, faceBox: null }
+  } catch (err) {
+    $error(err?.message || '上传失败')
+  } finally {
     loading.value = false
-  })
+  }
 }
 
 const onReset = () => {
@@ -424,18 +578,18 @@ const onReset = () => {
   typeId.value = null
 }
 
-watch(selectedCamera, async (val) => {
-  if (!val || !previewing.value) return
+watch(selectedCameraId, async (val) => {
+  if (!val) return
   if (connMode.value === 'lan') {
-    togglePreview(true)
+    startLanPreview(val)
   } else if (connMode.value === 'webrtc') {
-    await startRemotePreview(val.device_id)
+    await startRemotePreview(val)
   }
 })
 
 onMounted(() => {
-  // 可自动探测并连接
-  // connectCameras()
+  // 页面进入后自动探测并连接
+  connectCameras()
 })
 
 onBeforeUnmount(() => {
@@ -449,7 +603,133 @@ onBeforeUnmount(() => {
     }
   } catch (e) { void e }
   try { imageClientRef.value?.close() } catch (e) { void e }
+  if (lanPreviewTimer.value) { try { clearInterval(lanPreviewTimer.value) } catch (e) { void e } lanPreviewTimer.value = null }
+  stopRemotePreview()
+  try { if (webrtcWs.value) webrtcWs.value.close() } catch (e) { void e }
 })
+
+async function startLanPreview(deviceId) {
+  // 优先使用 MJPEG 流预览，失败时由 onStreamError 回退到快照轮询
+  if (lanPreviewTimer.value) { clearInterval(lanPreviewTimer.value); lanPreviewTimer.value = null }
+  stopRemotePreview()
+  const base = getLanApiBaseUrl()
+  const fpsHint = cameraMeta.value?.[deviceId]?.fps || 20
+  const fps = clamp(fpsHint, 1, 30)
+  lanPreviewMode.value = 'mjpeg'
+  streamUrl.value = `${base}/api/camera/stream_mjpeg?device_id=${encodeURIComponent(deviceId)}&fps=${fps}&ts=${Date.now()}`
+}
+
+function startLanSnapshotPreview(deviceId) {
+  if (lanPreviewTimer.value) { clearInterval(lanPreviewTimer.value); lanPreviewTimer.value = null }
+  lanPreviewMode.value = 'snapshot'
+  const base = getLanApiBaseUrl()
+  const update = () => {
+    const ts = Date.now()
+    streamUrl.value = `${base}/api/camera/snapshot?device_id=${encodeURIComponent(deviceId)}&ts=${ts}`
+  }
+  update()
+  lanPreviewTimer.value = setInterval(update, 200)
+}
+
+// 打开信令并发现远程摄像头（func_type=2）
+async function openSignalingAndDiscoverCameras() {
+  internal.loadDefaultsFromConfig()
+  await internal.getValidApiKey(userStore.tenant_id, userStore.token)
+  const authUrl = (internal.AUTH_URL || '').replace(/\/$/, '')
+  const sigUrlRaw = internal.SIGNALING_URL || ''
+  // 如已有旧连接，先关闭
+  try {
+    if (webrtcWs.value && (webrtcWs.value.readyState === WebSocket.OPEN || webrtcWs.value.readyState === WebSocket.CONNECTING)) {
+      webrtcWs.value.close()
+    }
+  } catch (e) { void e }
+  // 获取token
+  const authResp = await fetch(`${authUrl}/api-auth`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_key: internal.api_key })
+  })
+  if (!authResp.ok) throw new Error(`认证失败: ${authResp.status}`)
+  const authJson = await authResp.json()
+  if (!authJson?.success || !authJson?.token) throw new Error(authJson?.error || '认证失败')
+  webrtcToken.value = authJson.token
+  webrtcClientId.value = `web_ui_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+  // 建立 WebSocket 信令
+  await new Promise((resolve, reject) => {
+    let wsUrl = sigUrlRaw
+    if (!wsUrl.includes('/ws')) wsUrl = wsUrl.endsWith('/') ? `${wsUrl}ws` : `${wsUrl}/ws`
+    const ws = new WebSocket(wsUrl)
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'register', token: webrtcToken.value, id: webrtcClientId.value }))
+      resolve()
+    }
+    ws.onerror = () => reject(new Error('信令连接失败'))
+    ws.onclose = () => { /* ignore */ }
+    webrtcWs.value = ws
+  })
+
+  // 监听信令消息（仅设置一次）
+  if (!webrtcWs.value._bound) {
+    webrtcWs.value._bound = true
+    webrtcWs.value.onmessage = async (ev) => {
+      try {
+        const msg = JSON.parse(ev.data)
+        if (msg.type === 'clients_list') {
+          const list = Array.isArray(msg.clients) ? msg.clients : []
+          const map = {}
+          const entries = []
+          for (const client of list) {
+            const cams = Array.isArray(client.cameras) ? client.cameras.filter(c => c.func_type === 2) : []
+            for (const cam of cams) {
+              map[cam.device_id] = { clientId: client.id, index: cam.index, type: cam.type, name: cam.name, resolution: cam.resolution, fps: cam.fps }
+              entries.push({ clientId: client.id, camera: cam })
+            }
+          }
+          remoteCameras.value = map
+          // 更新下拉
+          const meta = {}
+          cameraOptions.value = entries.map((entry) => {
+            const cam = entry.camera
+            meta[cam.device_id] = { fps: cam.fps || 15, name: cam.name, resolution: cam.resolution }
+            return { label: `${cam.name || cam.device_id || 'Camera'} ${cam.resolution ? '(' + cam.resolution + ')' : ''}`,
+                     value: cam.device_id }
+          })
+          cameraMeta.value = meta
+        } else if (msg.type === 'answer') {
+          if (webrtcPeer.value && msg.data) {
+            const desc = new RTCSessionDescription({ sdp: msg.data.sdp, type: msg.data.type })
+            await webrtcPeer.value.setRemoteDescription(desc).catch(() => {})
+          }
+        } else if (msg.type === 'ice-candidate') {
+          if (webrtcPeer.value && msg.data) {
+            const cand = new RTCIceCandidate({ candidate: msg.data.candidate, sdpMid: msg.data.sdpMid, sdpMLineIndex: msg.data.sdpMLineIndex })
+            await webrtcPeer.value.addIceCandidate(cand).catch(() => {})
+          }
+        } else if (msg.type === 'registered') {
+          // 注册成功后查询客户端
+          webrtcWs.value?.send(JSON.stringify({ type: 'query_clients', source: webrtcClientId.value }))
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // 主动发起一次查询
+  webrtcWs.value?.send(JSON.stringify({ type: 'query_clients', source: webrtcClientId.value }))
+
+  // 等待一点时间收集列表
+  await new Promise((r) => setTimeout(r, 500))
+  // 返回 entries 形式方便上层构建 options
+  const resultEntries = []
+  Object.keys(remoteCameras.value || {}).forEach((did) => {
+    const cam = remoteCameras.value[did]
+    resultEntries.push({ clientId: cam.clientId, camera: { device_id: did, index: cam.index, type: cam.type, name: cam.name, resolution: cam.resolution, fps: cam.fps } })
+  })
+  return resultEntries
+}
+
+async function openSignalingIfNeeded() {
+  if (webrtcWs.value && webrtcWs.value.readyState === WebSocket.OPEN) return
+  await openSignalingAndDiscoverCameras()
+}
 
 </script>
 <style lang="scss" scoped>
@@ -482,6 +762,7 @@ onBeforeUnmount(() => {
   .q-select .q-field__input { max-width: 114px; }
 }
 </style>
+
 
 
 

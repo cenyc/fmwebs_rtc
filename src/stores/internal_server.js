@@ -7,6 +7,7 @@ export const useInternalServerStore = defineStore('internal_server', {
     // 基础配置（来自 conf.json，可被租户覆盖）
     INTERNAL_IP: '',
     INTERNAL_PORT: 0,
+    INTERNAL_API_PORT: 0,
     SIGNALING_URL: '',
     AUTH_URL: '',
     IMAGE_ENDPOINT: '',
@@ -44,6 +45,7 @@ export const useInternalServerStore = defineStore('internal_server', {
         const s = cfg.internal_server
         this.INTERNAL_IP = s.INTERNAL_IP || this.INTERNAL_IP
         this.INTERNAL_PORT = s.INTERNAL_PORT || this.INTERNAL_PORT
+        this.INTERNAL_API_PORT = s.INTERNAL_API_PORT || this.INTERNAL_API_PORT
         this.SIGNALING_URL = s.SIGNALING_URL || this.SIGNALING_URL
         this.AUTH_URL = s.AUTH_URL || this.AUTH_URL
         this.IMAGE_ENDPOINT = s.IMAGE_ENDPOINT || this.IMAGE_ENDPOINT
