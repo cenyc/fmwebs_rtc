@@ -518,8 +518,33 @@ const handleFileSelect = (file) => {
   if (!file) return
   const reader = new FileReader()
   reader.onload = () => {
-    base64Image.value = reader.result
+    const src = reader.result
+    const img = new Image()
+    img.onload = async () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        // 统一为 JPEG 数据，便于与摄像头抓拍保持一致
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+        // 调用后端做人脸检测
+        const faces = connMode.value === 'webrtc' ? await detectFacesRemote(dataUrl) : await detectFacesLan(dataUrl)
+        if (!faces?.length) { $error('未检测到人脸'); return }
+        if (faces.length > 1) { $error(`检测到${faces.length}张人脸，请确保只有一人`); return }
+        const best = pickBestFace(faces)
+        const cropped = await cropFaceFromDataUrl(dataUrl, best?.bbox || best)
+        base64Image.value = cropped
+        lastCapture.value = { original: dataUrl, faceBox: (best?.bbox || best) }
+      } catch (e) {
+        $error(e?.message || '人脸检测失败')
+      }
+    }
+    img.onerror = () => $error('图片加载失败，请重试')
+    img.src = src
   }
+  reader.onerror = () => $error('文件读取失败，请重试')
   reader.readAsDataURL(file)
 }
 
@@ -786,7 +811,6 @@ async function openSignalingIfNeeded() {
   .q-select .q-field__input { max-width: 114px; }
 }
 </style>
-
 
 
 
