@@ -1,15 +1,15 @@
 {
   "default_server_config": {
     "login_server": {
-      "base_url": "http://127.0.0.1:1818/v1/",
+      "base_url": "https://logs.spaceinsight.cn/v1/",
       "server_name": "system login server"
     },
     "main_server": {
-      "base_url": "http://127.0.0.1:2818/v1/",
+      "base_url": "https://mgt.spaceinsight.cn/v1/",
       "server_name": "trade main server"
     },
     "eyes_server": {
-      "base_url": "http://127.0.0.1:1055/v1/",
+      "base_url": "https://mgt.spaceinsight.cn/v1/",
       "server_name": "eyes message server"
     },
     "internal_server": {

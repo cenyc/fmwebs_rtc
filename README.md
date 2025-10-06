@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# fmweb
-=======
 # SpaceInsight (spaceinsight)
 
 SpaceInsight 智慧安防小系统
@@ -44,4 +41,3 @@ quasar build
 ### Customize the configuration
 
 See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-config-js).
->>>>>>> 75ce226 (完成ui功能)
